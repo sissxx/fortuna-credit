@@ -8,9 +8,10 @@ type Props = InputHTMLAttributes<HTMLInputElement> & {
   error?: string;
   hint?: string;
   optional?: boolean;
+  optionalLabel?: string;
 };
 
-export default function Input({ label, error, hint, optional, className, id, required, ...rest }: Props) {
+export default function Input({ label, error, hint, optional, optionalLabel = "Optional", className, id, required, ...rest }: Props) {
   const generatedId = useId();
   const inputId = id ?? generatedId;
   const errorId = `${inputId}-error`;
@@ -23,7 +24,7 @@ export default function Input({ label, error, hint, optional, className, id, req
           {label}
           {required && <span className="ml-0.5 text-brand-gold" aria-hidden>*</span>}
         </span>
-        {optional && <span className="text-xs font-normal text-brand-gray/50">Optional</span>}
+        {optional && <span className="text-xs font-normal text-brand-gray/50">{optionalLabel}</span>}
       </label>
       <input
         id={inputId}

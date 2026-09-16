@@ -1,24 +1,33 @@
 import type { MetadataRoute } from "next";
+import { locales, alternatePaths, type RouteKey } from "@/i18n/config";
+import { siteUrl } from "@/i18n/metadata";
 
-const baseUrl = "https://www.fortunacredit.example";
-
-const routes = [
-  "",
-  "/loans",
-  "/how-it-works",
-  "/conditions",
-  "/locations",
-  "/faq",
-  "/contact",
-  "/apply",
-  "/application-status",
+const routes: RouteKey[] = [
+  "home",
+  "loans",
+  "howItWorks",
+  "conditions",
+  "locations",
+  "faq",
+  "contact",
+  "apply",
+  "applicationStatus",
 ];
 
 export default function sitemap(): MetadataRoute.Sitemap {
-  return routes.map((route) => ({
-    url: `${baseUrl}${route}`,
-    lastModified: new Date(),
-    changeFrequency: "weekly",
-    priority: route === "" ? 1 : 0.7,
-  }));
+  return routes.flatMap((route) => {
+    const paths = alternatePaths(route);
+    return locales.map((locale) => ({
+      url: `${siteUrl}${paths[locale]}`,
+      lastModified: new Date(),
+      changeFrequency: "weekly" as const,
+      priority: route === "home" ? 1 : 0.7,
+      alternates: {
+        languages: {
+          bg: `${siteUrl}${paths.bg}`,
+          en: `${siteUrl}${paths.en}`,
+        },
+      },
+    }));
+  });
 }

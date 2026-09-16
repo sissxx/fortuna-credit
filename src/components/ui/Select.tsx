@@ -7,10 +7,11 @@ type Props = SelectHTMLAttributes<HTMLSelectElement> & {
   label: string;
   error?: string;
   optional?: boolean;
+  optionalLabel?: string;
   children: ReactNode;
 };
 
-export default function Select({ label, error, optional, className, id, required, children, ...rest }: Props) {
+export default function Select({ label, error, optional, optionalLabel = "Optional", className, id, required, children, ...rest }: Props) {
   const generatedId = useId();
   const selectId = id ?? generatedId;
   const errorId = `${selectId}-error`;
@@ -22,7 +23,7 @@ export default function Select({ label, error, optional, className, id, required
           {label}
           {required && <span className="ml-0.5 text-brand-gold" aria-hidden>*</span>}
         </span>
-        {optional && <span className="text-xs font-normal text-brand-gray/50">Optional</span>}
+        {optional && <span className="text-xs font-normal text-brand-gray/50">{optionalLabel}</span>}
       </label>
       <select
         id={selectId}

@@ -1,5 +1,5 @@
 import SectionHeading from "../ui/SectionHeading";
-import { advantages } from "@/config/site";
+import type { Dictionary } from "@/i18n/getDictionary";
 
 const icons = [
   <path key="1" d="M4 8h16M4 12h10M4 16h7" />,
@@ -10,23 +10,18 @@ const icons = [
   <path key="6" d="M12 4v16M4 12h16" />,
 ];
 
-export default function WhyFortuna() {
+export default function WhyFortuna({ dict }: { dict: Dictionary }) {
+  const w = dict.why;
+
   return (
     <section className="bg-brand-black py-16 sm:py-24">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        <SectionHeading
-          eyebrow="Why Fortuna Credit"
-          title="Built around trust and simplicity"
-          description="We designed our process to be transparent from the first click to your final payment."
-          dark
-          align="center"
-          className="mx-auto"
-        />
+        <SectionHeading eyebrow={w.eyebrow} title={w.title} description={w.description} dark align="center" className="mx-auto" />
 
         <div className="mt-14 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-          {advantages.map((advantage, index) => (
+          {w.items.map((item, index) => (
             <div
-              key={advantage.title}
+              key={item.title}
               className="rounded-2xl border border-white/10 bg-white/[0.03] p-6 transition-all duration-300 hover:border-brand-gold/40 hover:bg-white/[0.05]"
             >
               <span className="flex h-11 w-11 items-center justify-center rounded-full border border-brand-gold/30 text-brand-gold-bright">
@@ -34,8 +29,8 @@ export default function WhyFortuna() {
                   {icons[index % icons.length]}
                 </svg>
               </span>
-              <h3 className="mt-4 text-lg font-bold text-white">{advantage.title}</h3>
-              <p className="mt-2 text-sm leading-relaxed text-brand-muted">{advantage.description}</p>
+              <h3 className="mt-4 text-lg font-bold text-white">{item.title}</h3>
+              <p className="mt-2 text-sm leading-relaxed text-brand-muted">{item.description}</p>
             </div>
           ))}
         </div>

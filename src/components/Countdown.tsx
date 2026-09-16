@@ -2,6 +2,9 @@
 
 import { useEffect, useState } from "react";
 import Button from "./ui/Button";
+import { localePath, type Locale } from "@/i18n/config";
+import { formatDate, t } from "@/i18n/format";
+import type { Dictionary } from "@/i18n/getDictionary";
 
 type TimeLeft = { days: number; hours: number; minutes: number; seconds: number };
 
@@ -19,7 +22,7 @@ function getTimeLeft(targetDate: string): TimeLeft | null {
 
 function Unit({ value, label }: { value: number; label: string }) {
   return (
-    <div className="flex flex-col items-center gap-1">
+    <div className="flex flex-col items-center gap-1.5">
       <div className="flex h-16 w-16 items-center justify-center rounded-xl border border-brand-gold/30 bg-white/5 text-2xl font-bold tabular-nums text-brand-gold-bright sm:h-20 sm:w-20 sm:text-3xl">
         {String(value).padStart(2, "0")}
       </div>
@@ -32,12 +35,12 @@ function Unit({ value, label }: { value: number; label: string }) {
 
 export default function Countdown({
   targetDate,
-  city,
-  address,
+  dict,
+  locale,
 }: {
   targetDate: string;
-  city: string;
-  address: string;
+  dict: Dictionary;
+  locale: Locale;
 }) {
   const [timeLeft, setTimeLeft] = useState<TimeLeft | null>(null);
   const [mounted, setMounted] = useState(false);
@@ -52,6 +55,8 @@ export default function Countdown({
     return () => clearInterval(interval);
   }, [targetDate]);
 
+  const city = dict.newOfficeData.city;
+
   if (!mounted) {
     return <div className="h-32" aria-hidden />;
   }
@@ -61,39 +66,39 @@ export default function Countdown({
       <div className="flex flex-col items-center gap-4 text-center animate-fade-in">
         <span className="inline-flex items-center gap-2 rounded-full bg-brand-gold px-4 py-1.5 text-xs font-bold uppercase tracking-widest text-brand-black">
           <span className="h-2 w-2 animate-pulse rounded-full bg-brand-black" aria-hidden />
-          We are open
+          {dict.countdown.openBadge}
         </span>
-        <p className="text-lg text-white">
-          Visit our new Fortuna Credit office in <span className="text-brand-gold-bright">{city}</span>.
-        </p>
-        <Button href="/locations" variant="primary">
-          Get Directions
+        <p className="text-lg text-white">{t(dict.countdown.openMessage, { city })}</p>
+        <Button href={localePath(locale, "locations")} variant="primary">
+          {dict.countdown.openCta}
         </Button>
       </div>
     );
   }
 
+  const formattedDate = formatDate(targetDate, locale);
+
   return (
     <div className="flex flex-col items-center gap-6 text-center">
       <div>
-        <p className="text-xs font-bold uppercase tracking-[0.2em] text-brand-gold">New office opening</p>
-        <p className="mt-1 text-2xl font-bold text-white sm:text-3xl">October 1</p>
+        <p className="text-xs font-bold uppercase tracking-[0.2em] text-brand-gold">{dict.countdown.openingLabel}</p>
+        <p className="mt-1 text-2xl font-bold text-white sm:text-3xl">{formattedDate}</p>
       </div>
       <div
         className="flex items-center gap-2.5 sm:gap-4"
         role="timer"
         aria-live="off"
-        aria-label={`Time remaining until new office opening: ${timeLeft.days} days, ${timeLeft.hours} hours, ${timeLeft.minutes} minutes, ${timeLeft.seconds} seconds`}
+        aria-label={`${timeLeft.days} ${dict.countdown.days}, ${timeLeft.hours} ${dict.countdown.hours}, ${timeLeft.minutes} ${dict.countdown.minutes}, ${timeLeft.seconds} ${dict.countdown.seconds}`}
       >
-        <Unit value={timeLeft.days} label="Days" />
+        <Unit value={timeLeft.days} label={dict.countdown.days} />
         <span className="pb-5 text-xl text-brand-gold/50" aria-hidden>:</span>
-        <Unit value={timeLeft.hours} label="Hours" />
+        <Unit value={timeLeft.hours} label={dict.countdown.hours} />
         <span className="pb-5 text-xl text-brand-gold/50" aria-hidden>:</span>
-        <Unit value={timeLeft.minutes} label="Minutes" />
+        <Unit value={timeLeft.minutes} label={dict.countdown.minutes} />
         <span className="pb-5 text-xl text-brand-gold/50" aria-hidden>:</span>
-        <Unit value={timeLeft.seconds} label="Seconds" />
+        <Unit value={timeLeft.seconds} label={dict.countdown.seconds} />
       </div>
-      <p className="max-w-sm text-sm text-brand-muted">{address}</p>
+      <p className="max-w-sm text-sm text-brand-muted">{dict.newOfficeData.address}</p>
     </div>
   );
 }

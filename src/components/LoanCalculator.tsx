@@ -3,7 +3,10 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { loanConfig } from "@/config/site";
-import { formatCurrency, cn } from "@/lib/utils";
+import { localePath, type Locale } from "@/i18n/config";
+import { formatCurrency } from "@/i18n/format";
+import type { Dictionary } from "@/i18n/getDictionary";
+import { cn } from "@/lib/utils";
 import Button from "./ui/Button";
 
 export function estimateLoan(amount: number, term: number) {
@@ -14,7 +17,15 @@ export function estimateLoan(amount: number, term: number) {
   return { interest, fees, total, monthlyPayment };
 }
 
-export default function LoanCalculator({ variant = "light" }: { variant?: "light" | "dark" }) {
+export default function LoanCalculator({
+  dict,
+  locale,
+  variant = "light",
+}: {
+  dict: Dictionary;
+  locale: Locale;
+  variant?: "light" | "dark";
+}) {
   const [amount, setAmount] = useState(loanConfig.defaultAmount);
   const [term, setTerm] = useState(loanConfig.defaultTerm);
   const router = useRouter();
@@ -27,13 +38,12 @@ export default function LoanCalculator({ variant = "light" }: { variant?: "light
 
   function handleApply() {
     if (typeof window !== "undefined") {
-      window.localStorage.setItem(
-        "fortuna-loan-selection",
-        JSON.stringify({ amount, term })
-      );
+      window.localStorage.setItem("fortuna-loan-selection", JSON.stringify({ amount, term }));
     }
-    router.push("/apply");
+    router.push(localePath(locale, "apply"));
   }
+
+  const money = (value: number) => formatCurrency(value, locale, loanConfig.currency);
 
   return (
     <div
@@ -42,20 +52,16 @@ export default function LoanCalculator({ variant = "light" }: { variant?: "light
         dark ? "border-brand-gold/20 bg-brand-black-deep text-white" : "border-black/8 bg-white text-brand-black"
       )}
     >
-      <p className={cn("text-xs font-bold uppercase tracking-widest", dark ? "text-brand-gold" : "text-brand-gold")}>
-        Loan calculator
-      </p>
-      <h3 className={cn("mt-1 text-xl font-bold", dark && "text-white")}>Estimate your loan</h3>
+      <p className="text-xs font-bold uppercase tracking-widest text-brand-gold">{dict.calculator.eyebrow}</p>
+      <h3 className={cn("mt-1 text-xl font-bold", dark && "text-white")}>{dict.calculator.title}</h3>
 
       <div className="mt-6 space-y-6">
         <div>
-          <div className="mb-2 flex items-center justify-between">
+          <div className="mb-2 flex items-center justify-between gap-3">
             <label htmlFor="calc-amount" className={cn("text-sm font-medium", dark ? "text-brand-muted" : "text-brand-gray")}>
-              How much do you need?
+              {dict.calculator.amountLabel}
             </label>
-            <span className="text-lg font-bold tabular-nums text-brand-gold-bright">
-              {formatCurrency(amount, loanConfig.currencySymbol)}
-            </span>
+            <span className="text-lg font-bold tabular-nums text-brand-gold-bright">{money(amount)}</span>
           </div>
           <input
             id="calc-amount"
@@ -66,20 +72,22 @@ export default function LoanCalculator({ variant = "light" }: { variant?: "light
             value={amount}
             onChange={(e) => setAmount(Number(e.target.value))}
             style={{ ["--range-progress" as string]: `${amountProgress}%` }}
-            aria-valuetext={formatCurrency(amount, loanConfig.currencySymbol)}
+            aria-valuetext={money(amount)}
           />
           <div className={cn("mt-1 flex justify-between text-xs", dark ? "text-brand-muted/70" : "text-brand-gray/50")}>
-            <span>{formatCurrency(loanConfig.minAmount, loanConfig.currencySymbol)}</span>
-            <span>{formatCurrency(loanConfig.maxAmount, loanConfig.currencySymbol)}</span>
+            <span>{money(loanConfig.minAmount)}</span>
+            <span>{money(loanConfig.maxAmount)}</span>
           </div>
         </div>
 
         <div>
-          <div className="mb-2 flex items-center justify-between">
+          <div className="mb-2 flex items-center justify-between gap-3">
             <label htmlFor="calc-term" className={cn("text-sm font-medium", dark ? "text-brand-muted" : "text-brand-gray")}>
-              Loan term
+              {dict.calculator.termLabel}
             </label>
-            <span className="text-lg font-bold tabular-nums text-brand-gold-bright">{term} months</span>
+            <span className="text-lg font-bold tabular-nums text-brand-gold-bright">
+              {term} {dict.common.months}
+            </span>
           </div>
           <input
             id="calc-term"
@@ -90,11 +98,15 @@ export default function LoanCalculator({ variant = "light" }: { variant?: "light
             value={term}
             onChange={(e) => setTerm(Number(e.target.value))}
             style={{ ["--range-progress" as string]: `${termProgress}%` }}
-            aria-valuetext={`${term} months`}
+            aria-valuetext={`${term} ${dict.common.months}`}
           />
           <div className={cn("mt-1 flex justify-between text-xs", dark ? "text-brand-muted/70" : "text-brand-gray/50")}>
-            <span>{loanConfig.minTerm} months</span>
-            <span>{loanConfig.maxTerm} months</span>
+            <span>
+              {loanConfig.minTerm} {dict.common.months}
+            </span>
+            <span>
+              {loanConfig.maxTerm} {dict.common.months}
+            </span>
           </div>
         </div>
       </div>
@@ -106,39 +118,39 @@ export default function LoanCalculator({ variant = "light" }: { variant?: "light
         )}
       >
         <div>
-          <dt className={cn(dark ? "text-brand-muted" : "text-brand-gray/60")}>Requested amount</dt>
-          <dd className="mt-0.5 font-semibold tabular-nums">{formatCurrency(amount, loanConfig.currencySymbol)}</dd>
+          <dt className={cn(dark ? "text-brand-muted" : "text-brand-gray/60")}>{dict.calculator.requestedAmount}</dt>
+          <dd className="mt-0.5 font-semibold tabular-nums">{money(amount)}</dd>
         </div>
         <div>
-          <dt className={cn(dark ? "text-brand-muted" : "text-brand-gray/60")}>Loan term</dt>
-          <dd className="mt-0.5 font-semibold tabular-nums">{term} months</dd>
-        </div>
-        <div>
-          <dt className={cn(dark ? "text-brand-muted" : "text-brand-gray/60")}>Estimated interest</dt>
-          <dd className="mt-0.5 font-semibold tabular-nums">{formatCurrency(interest, loanConfig.currencySymbol)}</dd>
-        </div>
-        <div>
-          <dt className={cn(dark ? "text-brand-muted" : "text-brand-gray/60")}>Estimated fees</dt>
-          <dd className="mt-0.5 font-semibold tabular-nums">{formatCurrency(fees, loanConfig.currencySymbol)}</dd>
-        </div>
-        <div>
-          <dt className={cn(dark ? "text-brand-muted" : "text-brand-gray/60")}>Total repayment</dt>
-          <dd className="mt-0.5 font-semibold tabular-nums">{formatCurrency(total, loanConfig.currencySymbol)}</dd>
-        </div>
-        <div>
-          <dt className={cn(dark ? "text-brand-muted" : "text-brand-gray/60")}>Est. monthly payment</dt>
-          <dd className="mt-0.5 font-bold tabular-nums text-brand-gold-bright">
-            {formatCurrency(monthlyPayment, loanConfig.currencySymbol)}
+          <dt className={cn(dark ? "text-brand-muted" : "text-brand-gray/60")}>{dict.calculator.loanTerm}</dt>
+          <dd className="mt-0.5 font-semibold tabular-nums">
+            {term} {dict.common.months}
           </dd>
+        </div>
+        <div>
+          <dt className={cn(dark ? "text-brand-muted" : "text-brand-gray/60")}>{dict.calculator.estInterest}</dt>
+          <dd className="mt-0.5 font-semibold tabular-nums">{money(interest)}</dd>
+        </div>
+        <div>
+          <dt className={cn(dark ? "text-brand-muted" : "text-brand-gray/60")}>{dict.calculator.estFees}</dt>
+          <dd className="mt-0.5 font-semibold tabular-nums">{money(fees)}</dd>
+        </div>
+        <div>
+          <dt className={cn(dark ? "text-brand-muted" : "text-brand-gray/60")}>{dict.calculator.totalRepayment}</dt>
+          <dd className="mt-0.5 font-semibold tabular-nums">{money(total)}</dd>
+        </div>
+        <div>
+          <dt className={cn(dark ? "text-brand-muted" : "text-brand-gray/60")}>{dict.calculator.monthlyPayment}</dt>
+          <dd className="mt-0.5 font-bold tabular-nums text-brand-gold-bright">{money(monthlyPayment)}</dd>
         </div>
       </dl>
 
       <p className={cn("mt-4 text-xs leading-relaxed", dark ? "text-brand-muted/80" : "text-brand-gray/60")}>
-        Illustrative calculation only. Final terms are determined after application and assessment.
+        {dict.common.illustrativeOnly}
       </p>
 
       <Button onClick={handleApply} className="mt-5 w-full" size="lg">
-        Apply for this amount
+        {dict.calculator.cta}
       </Button>
     </div>
   );

@@ -7,11 +7,13 @@ export default function Modal({
   onClose,
   title,
   children,
+  closeLabel = "Close dialog",
 }: {
   open: boolean;
   onClose: () => void;
   title: string;
   children: ReactNode;
+  closeLabel?: string;
 }) {
   const titleId = useId();
   const dialogRef = useRef<HTMLDivElement>(null);
@@ -58,7 +60,7 @@ export default function Modal({
           <button
             type="button"
             onClick={onClose}
-            aria-label="Close dialog"
+            aria-label={closeLabel}
             className="rounded-full border border-white/15 p-1.5 text-white/70 hover:border-brand-gold hover:text-brand-gold"
           >
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>

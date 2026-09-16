@@ -1,10 +1,16 @@
 import Button from "../ui/Button";
+import { localePath, type Locale } from "@/i18n/config";
 import { fortuna } from "@/config/site";
+import type { Dictionary } from "@/i18n/getDictionary";
 
 export default function CTASection({
-  title = "Ready to get started?",
-  description = "Apply online in minutes, or speak with our team at a location near you.",
+  dict,
+  locale,
+  title,
+  description,
 }: {
+  dict: Dictionary;
+  locale: Locale;
   title?: string;
   description?: string;
 }) {
@@ -18,17 +24,17 @@ export default function CTASection({
         aria-hidden
       />
       <div className="relative mx-auto max-w-3xl px-4 text-center sm:px-6 lg:px-8">
-        <h2 className="text-3xl font-bold text-white sm:text-4xl">{title}</h2>
-        <p className="mt-4 text-brand-muted">{description}</p>
+        <h2 className="text-3xl font-bold text-white sm:text-4xl text-balance">{title ?? dict.cta.defaultTitle}</h2>
+        <p className="mt-4 text-brand-muted">{description ?? dict.cta.defaultDescription}</p>
         <div className="mt-8 flex flex-wrap items-center justify-center gap-4">
-          <Button href="/apply" size="lg" variant="primary">
-            Apply Now
+          <Button href={localePath(locale, "apply")} size="lg" variant="primary">
+            {dict.common.applyNow}
           </Button>
           <Button href={fortuna.phoneHref} size="lg" variant="outline">
-            Call Us
+            {dict.common.callUs}
           </Button>
-          <Button href="/locations" size="lg" variant="ghost" className="!text-brand-muted hover:!text-brand-gold-bright">
-            Find an Office
+          <Button href={localePath(locale, "locations")} size="lg" variant="ghost" className="!text-brand-muted hover:!text-brand-gold-bright">
+            {dict.common.findOffice}
           </Button>
         </div>
       </div>

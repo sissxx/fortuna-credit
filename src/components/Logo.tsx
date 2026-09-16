@@ -1,12 +1,13 @@
 import Link from "next/link";
 import { cn } from "@/lib/utils";
+import type { Locale } from "@/i18n/config";
 
-export default function Logo({ dark = false, className }: { dark?: boolean; className?: string }) {
+export default function Logo({ dark = false, className, locale = "bg" }: { dark?: boolean; className?: string; locale?: Locale }) {
   return (
     <Link
-      href="/"
+      href={`/${locale}`}
       className={cn("group inline-flex flex-col leading-none", className)}
-      aria-label="Fortuna Credit — home"
+      aria-label="Fortuna Credit"
     >
       <span
         className={cn(

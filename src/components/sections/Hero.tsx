@@ -1,7 +1,9 @@
 import Button from "../ui/Button";
 import LoanCalculator from "../LoanCalculator";
+import { localePath, type Locale } from "@/i18n/config";
+import type { Dictionary } from "@/i18n/getDictionary";
 
-export default function Hero() {
+export default function Hero({ dict, locale }: { dict: Dictionary; locale: Locale }) {
   return (
     <section className="relative overflow-hidden bg-brand-black">
       <div
@@ -15,43 +17,41 @@ export default function Hero() {
       <div className="relative mx-auto grid max-w-7xl gap-12 px-4 py-16 sm:px-6 lg:grid-cols-2 lg:items-center lg:gap-10 lg:px-8 lg:py-24">
         <div className="animate-fade-up">
           <p className="mb-5 inline-flex items-center gap-2 rounded-full border border-brand-gold/30 bg-white/5 px-4 py-1.5 text-xs font-semibold uppercase tracking-widest text-brand-gold-bright">
-            Fortuna Credit
+            {dict.hero.eyebrow}
           </p>
-          <h1 className="text-4xl font-bold leading-[1.08] tracking-tight text-white sm:text-5xl lg:text-6xl">
-            Fast credit.
+          <h1 className="text-4xl font-bold leading-[1.1] tracking-tight text-white sm:text-5xl lg:text-6xl text-balance">
+            {dict.hero.titleLine1}
             <br />
-            <span className="text-brand-gold-bright">Simple process.</span>
+            <span className="text-brand-gold-bright">{dict.hero.titleLine2}</span>
           </h1>
-          <p className="mt-6 max-w-lg text-lg text-brand-muted">
-            Get the financial support you need with a simple application and clear terms.
-          </p>
+          <p className="mt-6 max-w-lg text-lg text-brand-muted">{dict.hero.subtitle}</p>
 
           <div className="mt-8 flex flex-wrap gap-4">
-            <Button href="/apply" size="lg" variant="primary">
-              Apply Now
+            <Button href={localePath(locale, "apply")} size="lg" variant="primary">
+              {dict.hero.applyNow}
             </Button>
-            <Button href="/how-it-works" size="lg" variant="outline">
-              How It Works
+            <Button href={localePath(locale, "howItWorks")} size="lg" variant="outline">
+              {dict.hero.howItWorks}
             </Button>
           </div>
 
           <p className="mt-8 flex flex-wrap items-center gap-x-3 gap-y-2 text-sm text-brand-muted">
             <span className="inline-flex items-center gap-1.5">
-              <CheckDot /> Simple application
+              <CheckDot /> {dict.hero.trust1}
             </span>
             <span className="text-white/20" aria-hidden>•</span>
             <span className="inline-flex items-center gap-1.5">
-              <CheckDot /> Clear conditions
+              <CheckDot /> {dict.hero.trust2}
             </span>
             <span className="text-white/20" aria-hidden>•</span>
             <span className="inline-flex items-center gap-1.5">
-              <CheckDot /> Personal support
+              <CheckDot /> {dict.hero.trust3}
             </span>
           </p>
         </div>
 
         <div className="animate-fade-up [animation-delay:150ms]">
-          <LoanCalculator variant="dark" />
+          <LoanCalculator dict={dict} locale={locale} variant="dark" />
         </div>
       </div>
     </section>
