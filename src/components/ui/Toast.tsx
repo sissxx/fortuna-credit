@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useCallback, useContext, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useRef, useState, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
 type ToastVariant = "success" | "error" | "info";
@@ -14,9 +14,13 @@ const ToastContext = createContext<ToastContextValue | null>(null);
 
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<ToastItem[]>([]);
+  // Monotonic counter — Date.now() alone can collide when two toasts fire
+  // within the same millisecond (e.g. React StrictMode's double effect
+  // invocation in development), producing duplicate React keys.
+  const nextId = useRef(0);
 
   const showToast = useCallback((message: string, variant: ToastVariant = "info") => {
-    const id = Date.now();
+    const id = nextId.current++;
     setToasts((prev) => [...prev, { id, message, variant }]);
     setTimeout(() => {
       setToasts((prev) => prev.filter((t) => t.id !== id));

@@ -6,6 +6,12 @@ const LOCALE_COOKIE = "NEXT_LOCALE";
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
+  // The admin tool is a separate, non-localized section of the app — never
+  // rewrite it into /bg or /en.
+  if (pathname === "/admin" || pathname.startsWith("/admin/")) {
+    return NextResponse.next();
+  }
+
   const segments = pathname.split("/").filter(Boolean);
   const [first] = segments;
 
