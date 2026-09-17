@@ -19,7 +19,7 @@ export default function Hero({ dict, locale }: { dict: Dictionary; locale: Local
           <p className="mb-5 inline-flex items-center gap-2 rounded-full border border-brand-gold/30 bg-white/5 px-4 py-1.5 text-xs font-semibold uppercase tracking-widest text-brand-gold-bright">
             {dict.hero.eyebrow}
           </p>
-          <h1 className="text-4xl font-bold leading-[1.1] tracking-tight text-white sm:text-5xl lg:text-6xl text-balance">
+          <h1 className="font-heading text-4xl font-normal leading-[1.1] tracking-tight text-white sm:text-5xl lg:text-6xl text-balance">
             {dict.hero.titleLine1}
             <br />
             <span className="text-brand-gold-bright">{dict.hero.titleLine2}</span>

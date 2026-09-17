@@ -172,7 +172,7 @@ export default function ApplyForm({ dict, locale }: { dict: Dictionary; locale: 
             <path d="M4 12.5L9.5 18L20 6" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
         </span>
-        <h1 className="mt-6 text-2xl font-bold sm:text-3xl">{s.title}</h1>
+        <h1 className="font-heading mt-6 text-2xl font-normal sm:text-3xl">{s.title}</h1>
         <p className="mt-3 text-brand-muted">{t(s.body, { name: data.firstName || "" })}</p>
         <p className="mt-2 text-sm text-brand-gold-bright">{t(s.reference, { id: applicationId })}</p>
 
@@ -218,7 +218,7 @@ export default function ApplyForm({ dict, locale }: { dict: Dictionary; locale: 
 
   return (
     <div>
-      <h1 className="text-2xl font-bold text-brand-black sm:text-3xl">{af.title}</h1>
+      <h1 className="font-heading text-2xl font-normal text-brand-black sm:text-3xl">{af.title}</h1>
       <p className="mt-2 text-sm text-brand-gray/60">{af.subtitle}</p>
 
       <div className="mt-8">

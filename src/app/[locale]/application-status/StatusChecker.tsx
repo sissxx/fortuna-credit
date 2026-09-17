@@ -55,7 +55,7 @@ export default function StatusChecker({ dict }: { dict: Dictionary }) {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold text-brand-black sm:text-3xl">{p.title}</h1>
+      <h1 className="font-heading text-2xl font-normal text-brand-black sm:text-3xl">{p.title}</h1>
       <p className="mt-2 text-sm text-brand-gray/60">{p.description}</p>
 
       <div className="mt-3 inline-flex items-center gap-2 rounded-full border border-amber-400/40 bg-amber-50 px-3 py-1.5 text-xs font-medium text-amber-700">

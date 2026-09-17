@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import { Inter, Vidaloka, Playfair_Display } from "next/font/google";
 import "../globals.css";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
@@ -14,6 +14,25 @@ import { siteUrl } from "@/i18n/metadata";
 const inter = Inter({
   variable: "--font-inter",
   subsets: ["latin", "cyrillic"],
+  display: "swap",
+});
+
+// Matches the logo wordmark. Latin-only on Google Fonts — used for English
+// display headings and the brand wordmark, never for Cyrillic text.
+const vidaloka = Vidaloka({
+  variable: "--font-vidaloka",
+  subsets: ["latin"],
+  weight: "400",
+  display: "swap",
+});
+
+// Cyrillic-capable stand-in for Bulgarian display headings — a similarly
+// elegant high-contrast serif, so bg/en headings read as one brand even
+// though Vidaloka itself has no Cyrillic glyphs.
+const playfair = Playfair_Display({
+  variable: "--font-playfair",
+  subsets: ["latin", "cyrillic"],
+  weight: ["400", "600"],
   display: "swap",
 });
 
@@ -59,8 +78,14 @@ export default async function LocaleLayout({
   const locale = await resolveLocale(params);
   const dict = await getDictionary(locale);
 
+  const headingFont = locale === "en" ? "var(--font-vidaloka)" : "var(--font-playfair)";
+
   return (
-    <html lang={dict.htmlLang} className={`${inter.variable} h-full antialiased`}>
+    <html
+      lang={dict.htmlLang}
+      className={`${inter.variable} ${vidaloka.variable} ${playfair.variable} h-full antialiased`}
+      style={{ ["--font-heading" as string]: headingFont }}
+    >
       <body className="flex min-h-full flex-col bg-white text-brand-gray">
         <a
           href="#main-content"

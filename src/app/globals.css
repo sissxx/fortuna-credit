@@ -23,6 +23,10 @@
   --color-brand-muted: var(--color-muted);
 
   --font-sans: var(--font-inter);
+  /* Value is set per-locale on <html> (Vidaloka for en, Playfair Display
+     for bg — Vidaloka has no Cyrillic glyphs). Falls back to Playfair. */
+  --font-heading: var(--font-heading, var(--font-playfair));
+  --font-brand: var(--font-vidaloka);
 
   --animate-fade-up: fade-up 0.7s ease-out both;
   --animate-fade-in: fade-in 0.8s ease-out both;

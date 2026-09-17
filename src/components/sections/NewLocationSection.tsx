@@ -22,7 +22,7 @@ export default function NewLocationSection({ dict, locale }: { dict: Dictionary;
       <div className="relative mx-auto grid max-w-7xl gap-10 px-4 py-16 sm:px-6 lg:grid-cols-2 lg:items-center lg:gap-16 lg:px-8 lg:py-24">
         <div className="animate-fade-up">
           <Badge variant="gold">{dict.newLocation.badge}</Badge>
-          <h2 id="new-location-heading" className="mt-4 text-3xl font-bold text-white sm:text-4xl text-balance">
+          <h2 id="new-location-heading" className="font-heading mt-4 text-3xl font-normal text-white sm:text-4xl text-balance">
             {t(dict.newLocation.title, { date })}
           </h2>
           <p className="mt-4 max-w-md text-brand-muted">{dict.newLocation.description}</p>

@@ -24,7 +24,7 @@ export default function CTASection({
         aria-hidden
       />
       <div className="relative mx-auto max-w-3xl px-4 text-center sm:px-6 lg:px-8">
-        <h2 className="text-3xl font-bold text-white sm:text-4xl text-balance">{title ?? dict.cta.defaultTitle}</h2>
+        <h2 className="font-heading text-3xl font-normal text-white sm:text-4xl text-balance">{title ?? dict.cta.defaultTitle}</h2>
         <p className="mt-4 text-brand-muted">{description ?? dict.cta.defaultDescription}</p>
         <div className="mt-8 flex flex-wrap items-center justify-center gap-4">
           <Button href={localePath(locale, "apply")} size="lg" variant="primary">
