@@ -1,5 +1,5 @@
 import { LAYOUT_PRESETS } from "./layoutPresets";
-import { getFortunaContext, type ContextLocale, type FortunaBusinessContext } from "@/lib/fortuna/businessContext";
+import { getFortunaContext, type ContextLocale, type FortunaBusinessContext, type ValueProp } from "@/lib/fortuna/businessContext";
 import { genId, type CampaignCopy, type CampaignInput, type DesignVariation, type FormatId, type PostType } from "./types";
 
 /**
@@ -7,12 +7,12 @@ import { genId, type CampaignCopy, type CampaignInput, type DesignVariation, typ
  * UI only depends on this interface — swap TemplateContentGenerator for a
  * real LLM-backed implementation later without touching any component.
  *
- * This generator is grounded in FORTUNA_CONTEXT (src/lib/fortuna/businessContext.ts)
- * — the real vision statement, value propositions, eligibility rules and
- * office/contact data already published on the site — rather than generic
- * marketing filler. A caller never has to re-explain what Fortuna Credit is;
- * it only supplies the campaign-specific bits (headline override, offer,
- * dates) on top of that standing context.
+ * This generator is fully grounded in FORTUNA_CONTEXT
+ * (src/lib/fortuna/businessContext.ts) — the real vision statement, value
+ * propositions, eligibility rules and office/contact data already published
+ * on the site. Headline, supporting text and CTA are never typed freehand
+ * by the caller; they are always derived from the context plus the
+ * admin's selected focus areas and post type.
  *
  * Design/layout is deliberately NOT part of this interface's output beyond
  * the DesignVariation shells it returns: colors, fonts and composition come
@@ -61,109 +61,107 @@ function slugTag(word: string): string {
   );
 }
 
-function fill(template: string, input: CampaignInput, product: string): string {
-  return template
-    .replace(/\{product\}/g, input.productOrService?.trim() || product)
-    .replace(/\{offer\}/g, input.offer || "")
-    .replace(/\{campaignName\}/g, input.campaignName || "")
-    .trim()
-    .replace(/\s+/g, " ");
+// The value props the admin explicitly selected (if any), resolved against
+// the current locale's context. Falls back to a deterministic pick from the
+// full list so a campaign with no selection still gets varied, on-context
+// copy instead of a single default every time.
+function resolveFocusProps(input: CampaignInput, ctx: FortunaBusinessContext): ValueProp[] {
+  const selected = ctx.valueProps.filter((v) => input.focusAreas.includes(v.title));
+  if (selected.length > 0) return selected;
+  const seed = hashSeed(input.postType + ctx.locale);
+  return [pick(ctx.valueProps, seed)];
 }
 
-// Caption builders per post type — each one is grounded in the real
-// business context rather than generic template slop. Returns a caption
-// candidate list; one is picked deterministically from the campaign seed
-// so re-generating the same campaign is stable, while different campaigns
-// naturally land on different phrasing.
-function captionCandidates(input: CampaignInput, ctx: FortunaBusinessContext): string[] {
+function joinWithAnd(items: string[], locale: ContextLocale): string {
+  if (items.length <= 1) return items[0] ?? "";
+  const last = items[items.length - 1];
+  const rest = items.slice(0, -1);
+  return `${rest.join(", ")} ${locale === "bg" ? "и" : "and"} ${last}`;
+}
+
+function withAdditionalInfo(text: string, input: CampaignInput): string {
+  return input.additionalInfo?.trim() ? `${text} ${input.additionalInfo.trim()}` : text;
+}
+
+function captionCandidates(input: CampaignInput, ctx: FortunaBusinessContext, focus: ValueProp[]): string[] {
   const bg = ctx.locale === "bg";
-  const product = input.productOrService?.trim() || ctx.service.name;
+  const focusTitles = joinWithAnd(focus.map((f) => f.title.toLowerCase()), ctx.locale);
 
   switch (input.postType) {
     case "promotional":
-      return [
-        fill(bg ? "{product} — {offer_or_vision}" : "{product} — {offer_or_vision}", input, product).replace(
-          "{offer_or_vision}",
-          input.offer || ctx.service.description
-        ),
-        ctx.service.description + (input.offer ? ` ${input.offer}.` : ""),
-      ];
+      return [ctx.service.description, `${ctx.tagline} ${focus[0].description}`];
     case "product-announcement":
       return [
-        (bg ? `Представяме ви ${product}. ` : `Introducing ${product}. `) + ctx.service.description,
-        (bg ? `Ново във ${ctx.name}: ` : `New at ${ctx.name}: `) + product + (input.offer ? ` — ${input.offer}` : "."),
+        (bg ? `${ctx.name} — ` : `${ctx.name} — `) + ctx.service.description,
+        bg ? `Ето какво предлагаме: ${focusTitles}.` : `Here's what we offer: ${focusTitles}.`,
       ];
     case "sale-discount":
+      // No real rates/offers are published — ground this in eligibility +
+      // process speed instead of inventing a discount.
       return [
-        `${input.offer || (bg ? "Специална оферта" : "Special offer")} — ${product}${
-          bg ? " само за ограничено време." : ", for a limited time."
-        }`,
+        bg
+          ? `Проверете дали отговаряте на условията и кандидатствайте — ${ctx.eligibility[0].toLowerCase()}.`
+          : `Check if you qualify and apply — ${ctx.eligibility[0].toLowerCase()}.`,
       ];
     case "educational": {
-      const rule = pick(ctx.eligibility, hashSeed(input.campaignName));
+      const rule = pick(ctx.eligibility, hashSeed(input.postType));
       return [
         bg
-          ? `Какво трябва да знаете, преди да кандидатствате за ${product}: ${rule.toLowerCase()}.`
-          : `What you should know before applying for ${product}: ${rule.toLowerCase()}.`,
-        bg
-          ? `${ctx.responsibleBorrowing[0]}`
-          : `${ctx.responsibleBorrowing[0]}`,
+          ? `Какво трябва да знаете, преди да кандидатствате: ${rule.toLowerCase()}.`
+          : `What you should know before applying: ${rule.toLowerCase()}.`,
+        ctx.responsibleBorrowing[0],
       ];
     }
     case "testimonial": {
-      const supportProp = ctx.valueProps.find((v) => /support|подход/i.test(v.title)) ?? ctx.valueProps[2];
+      const supportProp = ctx.valueProps.find((v) => /support|подход/i.test(v.title)) ?? focus[0];
       return [
         bg
           ? `${supportProp.description} Ето защо клиентите ни избират ${ctx.name}.`
           : `${supportProp.description} That's why customers choose ${ctx.name}.`,
       ];
     }
-    case "feature-highlight": {
-      const prop = pick(ctx.valueProps, hashSeed(input.campaignName + input.productOrService));
-      return [`${prop.title}. ${prop.description}`];
-    }
+    case "feature-highlight":
+      return [`${focus[0].title}. ${focus[0].description}`];
     case "event-announcement":
       return [
         bg
-          ? `${input.campaignName || `Нов офис на ${ctx.name}`} — ${ctx.newOffice.openingDateLabel} в ${ctx.newOffice.city}.`
-          : `${input.campaignName || `A new ${ctx.name} location`} — ${ctx.newOffice.openingDateLabel} in ${ctx.newOffice.city}.`,
+          ? `Нов офис на ${ctx.name} — ${ctx.newOffice.openingDateLabel} в ${ctx.newOffice.city}.`
+          : `A new ${ctx.name} location — ${ctx.newOffice.openingDateLabel} in ${ctx.newOffice.city}.`,
       ];
     case "brand-awareness":
-      return [ctx.tagline + " " + ctx.vision, ctx.vision];
+      return [`${ctx.tagline} ${ctx.vision}`, ctx.vision];
     case "custom":
     default:
-      return [fill("{product}. {offer}", input, product)];
+      return [ctx.service.description];
   }
 }
 
 export class TemplateContentGenerator implements ContentGenerator {
   async generateCampaignCopy(input: CampaignInput, locale: ContextLocale): Promise<CampaignCopy> {
     const ctx = getFortunaContext(locale);
-    const seed = hashSeed(input.campaignName + input.productOrService + input.postType);
+    const focus = resolveFocusProps(input, ctx);
+    const seed = hashSeed(focus.map((f) => f.title).join("|") + input.postType);
 
-    const headline = input.headline?.trim() || input.productOrService?.trim() || ctx.service.name;
-    const cta = input.cta?.trim() || CTA_DEFAULTS[input.postType][locale];
-    const caption = pick(captionCandidates(input, ctx), seed);
+    const headline =
+      input.postType === "event-announcement"
+        ? ctx.newOffice.city
+        : focus.length === 1
+          ? focus[0].title
+          : ctx.service.name;
 
-    const productTags = (input.productOrService || ctx.service.name)
-      .split(/[,/]|\sand\s|\sи\s/i)
-      .map((w) => slugTag(w))
-      .filter(Boolean)
-      .slice(0, 3);
+    const supportingText =
+      focus.length === 1 ? focus[0].description : joinWithAnd(focus.map((f) => f.title), locale);
 
+    const cta = CTA_DEFAULTS[input.postType][locale];
+    const caption = withAdditionalInfo(pick(captionCandidates(input, ctx, focus), seed), input);
+
+    const focusTags = focus.map((f) => slugTag(f.title)).filter(Boolean);
     const brandTag = slugTag(ctx.name);
-    const hashtags = Array.from(new Set([brandTag, ...productTags, ...(locale === "bg" ? ["#Кредит", "#БързКредит"] : ["#Credit", "#FastCredit"])])).slice(
-      0,
-      8
-    );
+    const hashtags = Array.from(
+      new Set([brandTag, ...focusTags, ...(locale === "bg" ? ["#Кредит", "#БързКредит"] : ["#Credit", "#FastCredit"])])
+    ).slice(0, 8);
 
-    return {
-      headline,
-      supportingText: input.supportingText?.trim() || (input.postType === "brand-awareness" ? ctx.service.description : ""),
-      cta,
-      caption,
-      hashtags,
-    };
+    return { headline, supportingText, cta, caption, hashtags };
   }
 
   async generateVariations(input: CampaignInput, formatId: FormatId, locale: ContextLocale): Promise<DesignVariation[]> {
@@ -178,7 +176,6 @@ export class TemplateContentGenerator implements ContentGenerator {
         headline: copy.headline,
         supportingText: copy.supportingText,
         cta: copy.cta,
-        offer: input.offer || "",
         headlineScale: preset.headlineScale,
         textAlign: preset.textAlign,
         image: { src: null, fit: "cover", position: "center" },

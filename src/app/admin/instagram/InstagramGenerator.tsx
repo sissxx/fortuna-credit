@@ -29,15 +29,10 @@ import {
   type PostType,
 } from "@/lib/instagram/types";
 
+const FORTUNA_NAME = "Fortuna Credit";
+
 const emptyCampaign: CampaignInput = {
-  campaignName: "",
-  productOrService: "",
-  headline: "",
-  supportingText: "",
-  cta: "",
-  offer: "",
-  startDate: "",
-  endDate: "",
+  focusAreas: [],
   additionalInfo: "",
   postType: "promotional",
 };
@@ -72,7 +67,7 @@ export default function InstagramGenerator() {
 
   const [generated, setGenerated] = useState(false);
   const [selectedPresetId, setSelectedPresetId] = useState<LayoutPresetId>("minimal");
-  const [content, setContent] = useState({ headline: "", supportingText: "", cta: "", offer: "" });
+  const [content, setContent] = useState({ headline: "", supportingText: "", cta: "" });
   const [fineTune, setFineTune] = useState({ headlineScale: 1, textAlign: "left" as "left" | "center", showAccent: true });
   const [showLogo, setShowLogo] = useState(true);
   const [copy, setCopy] = useState<CampaignCopy | null>(null);
@@ -97,11 +92,11 @@ export default function InstagramGenerator() {
       const post = listPosts().find((p) => p.id === postId);
       if (post) {
         // eslint-disable-next-line react-hooks/set-state-in-effect
-        setCampaign((prev) => ({ ...prev, campaignName: post.campaignName, postType: post.postType }));
+        setCampaign((prev) => ({ ...prev, postType: post.postType }));
         setFormatId(post.formatId);
         setSelectedPresetId(post.variation.layoutPresetId);
         const e = post.variation.edits;
-        setContent({ headline: e.headline, supportingText: e.supportingText, cta: e.cta, offer: e.offer });
+        setContent({ headline: e.headline, supportingText: e.supportingText, cta: e.cta });
         setFineTune({ headlineScale: e.headlineScale, textAlign: e.textAlign, showAccent: e.showAccent });
         setShowLogo(e.showLogo);
         setImageSrc(e.image.src);
@@ -121,7 +116,7 @@ export default function InstagramGenerator() {
         setFormatId(template.formatId);
         setSelectedPresetId(template.layoutPresetId);
         const e = template.edits;
-        setContent({ headline: e.headline, supportingText: e.supportingText, cta: e.cta, offer: e.offer });
+        setContent({ headline: e.headline, supportingText: e.supportingText, cta: e.cta });
         setFineTune({ headlineScale: e.headlineScale, textAlign: e.textAlign, showAccent: e.showAccent });
         setShowLogo(e.showLogo);
         setImageSrc(e.image.src);
@@ -153,7 +148,6 @@ export default function InstagramGenerator() {
       headline: content.headline,
       supportingText: content.supportingText,
       cta: content.cta,
-      offer: content.offer,
       headlineScale: isSelected ? fineTune.headlineScale : preset.headlineScale,
       textAlign: isSelected ? fineTune.textAlign : preset.textAlign,
       image: { src: imageSrc, fit: imageFit, position: imagePosition },
@@ -163,10 +157,6 @@ export default function InstagramGenerator() {
   }
 
   async function handleGenerate() {
-    if (!campaign.campaignName.trim()) {
-      showToast("Add a campaign name first.", "error");
-      return;
-    }
     setGenerating(true);
     try {
       const generator = getContentGenerator();
@@ -176,7 +166,6 @@ export default function InstagramGenerator() {
         headline: generatedCopy.headline,
         supportingText: generatedCopy.supportingText,
         cta: generatedCopy.cta,
-        offer: campaign.offer,
       });
       setHashtagsText(generatedCopy.hashtags.join(" "));
       setSelectedPresetId("minimal");
@@ -208,14 +197,14 @@ export default function InstagramGenerator() {
     const dataUrl = handle?.getDataUrl(type);
     if (!dataUrl) return;
     const ext = type === "image/png" ? "png" : "jpg";
-    downloadDataUrl(dataUrl, `${campaign.campaignName || "fortuna-post"}-${selectedPresetId}.${ext}`);
+    downloadDataUrl(dataUrl, `fortuna-credit-${campaign.postType}-${selectedPresetId}.${ext}`);
   }
 
   function downloadAllVariations() {
     for (const preset of LAYOUT_PRESETS) {
       const handle = canvasRefs.current[preset.id];
       const dataUrl = handle?.getDataUrl("image/png");
-      if (dataUrl) downloadDataUrl(dataUrl, `${campaign.campaignName || "fortuna-post"}-${preset.id}.png`);
+      if (dataUrl) downloadDataUrl(dataUrl, `fortuna-credit-${campaign.postType}-${preset.id}.png`);
     }
   }
 
@@ -226,7 +215,7 @@ export default function InstagramGenerator() {
     const thumbnail = canvasRefs.current[selectedPresetId]?.getDataUrl("image/jpeg") ?? undefined;
     const post: GeneratedPost = {
       id: genId("post"),
-      campaignName: campaign.campaignName,
+      campaignName: `${FORTUNA_NAME} — ${POST_TYPE_LABELS[campaign.postType]}`,
       postType: campaign.postType,
       formatId,
       createdAt: new Date().toISOString(),
@@ -244,7 +233,7 @@ export default function InstagramGenerator() {
     const edits = buildEdits(selectedPresetId);
     saveTemplate({
       id: genId("template"),
-      name: campaign.campaignName || `${preset.label} template`,
+      name: `${POST_TYPE_LABELS[campaign.postType]} — ${preset.label}`,
       layoutPresetId: preset.id,
       formatId,
       edits,
@@ -300,30 +289,11 @@ export default function InstagramGenerator() {
         <div className="space-y-5">
           <section className="rounded-2xl border border-black/8 bg-white p-5">
             <h2 className="text-sm font-bold uppercase tracking-widest text-brand-gold">Campaign</h2>
+            <p className="mt-1 text-xs text-brand-gray/50">
+              Brand is always {FORTUNA_NAME}. Headline, supporting text and CTA are generated from the brand context —
+              fine-tune them after generating, below.
+            </p>
             <div className="mt-4 space-y-4">
-              <Input label="Campaign name" required value={campaign.campaignName} onChange={(e) => updateCampaign("campaignName", e.target.value)} />
-              <div>
-                <Input
-                  label="Product / service"
-                  optional
-                  hint={`Defaults to "${ctx.service.name}" if left blank`}
-                  placeholder={ctx.service.name}
-                  value={campaign.productOrService}
-                  onChange={(e) => updateCampaign("productOrService", e.target.value)}
-                />
-                <div className="mt-2 flex flex-wrap gap-1.5">
-                  {ctx.valueProps.slice(0, 4).map((v) => (
-                    <button
-                      key={v.title}
-                      type="button"
-                      onClick={() => updateCampaign("productOrService", v.title)}
-                      className="rounded-full border border-black/10 px-2.5 py-1 text-[11px] font-medium text-brand-gray/70 hover:border-brand-gold hover:text-brand-black"
-                    >
-                      {v.title}
-                    </button>
-                  ))}
-                </div>
-              </div>
               <Select label="Post type" value={campaign.postType} onChange={(e) => updateCampaign("postType", e.target.value as PostType)}>
                 {POST_TYPES.map((t) => (
                   <option key={t} value={t}>
@@ -331,15 +301,49 @@ export default function InstagramGenerator() {
                   </option>
                 ))}
               </Select>
-              <Input label="Headline" optional hint="Leave blank to auto-generate from product/service" value={campaign.headline} onChange={(e) => updateCampaign("headline", e.target.value)} />
-              <Input label="Supporting text" optional value={campaign.supportingText} onChange={(e) => updateCampaign("supportingText", e.target.value)} />
-              <Input label="Call to action" optional hint="Leave blank to auto-generate" value={campaign.cta} onChange={(e) => updateCampaign("cta", e.target.value)} />
-              <Input label="Price / discount / offer" optional value={campaign.offer} onChange={(e) => updateCampaign("offer", e.target.value)} />
-              <div className="grid grid-cols-2 gap-3">
-                <Input label="Start date" optional type="date" value={campaign.startDate} onChange={(e) => updateCampaign("startDate", e.target.value)} />
-                <Input label="End date" optional type="date" value={campaign.endDate} onChange={(e) => updateCampaign("endDate", e.target.value)} />
+
+              <div>
+                <span className="flex items-baseline justify-between text-sm font-medium text-brand-gray">
+                  <span>Focus areas</span>
+                  <span className="text-xs font-normal text-brand-gray/50">Select one or more</span>
+                </span>
+                <p className="mt-1 text-xs text-brand-gray/50">
+                  Leave none selected to let the generator pick automatically.
+                </p>
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {ctx.valueProps.map((v) => {
+                    const isSelected = campaign.focusAreas.includes(v.title);
+                    return (
+                      <button
+                        key={v.title}
+                        type="button"
+                        aria-pressed={isSelected}
+                        onClick={() =>
+                          updateCampaign(
+                            "focusAreas",
+                            isSelected ? campaign.focusAreas.filter((t) => t !== v.title) : [...campaign.focusAreas, v.title]
+                          )
+                        }
+                        className={`rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors ${
+                          isSelected
+                            ? "border-brand-gold bg-brand-gold text-brand-black"
+                            : "border-black/10 text-brand-gray/70 hover:border-brand-gold hover:text-brand-black"
+                        }`}
+                      >
+                        {v.title}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
-              <Input label="Additional info" optional value={campaign.additionalInfo} onChange={(e) => updateCampaign("additionalInfo", e.target.value)} />
+
+              <Input
+                label="Additional info"
+                optional
+                hint="Appended to the generated caption, e.g. a specific note for this post"
+                value={campaign.additionalInfo}
+                onChange={(e) => updateCampaign("additionalInfo", e.target.value)}
+              />
             </div>
           </section>
 
@@ -488,7 +492,6 @@ export default function InstagramGenerator() {
                       <Input label="Headline" value={content.headline} onChange={(e) => setContent((c) => ({ ...c, headline: e.target.value }))} />
                       <Input label="Supporting text" optional value={content.supportingText} onChange={(e) => setContent((c) => ({ ...c, supportingText: e.target.value }))} />
                       <Input label="CTA" value={content.cta} onChange={(e) => setContent((c) => ({ ...c, cta: e.target.value }))} />
-                      <Input label="Offer / price" optional value={content.offer} onChange={(e) => setContent((c) => ({ ...c, offer: e.target.value }))} />
                       <div>
                         <label htmlFor="headline-scale" className="text-sm font-medium text-brand-gray">
                           Headline size

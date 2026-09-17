@@ -306,26 +306,6 @@ const InstagramCanvas = forwardRef<InstagramCanvasHandle, Props>(function Instag
         cursorY += 8;
       }
 
-      // Offer badge (price / discount)
-      if (edits.offer) {
-        cursorY += 36;
-        ctx.font = `700 32px "${brandFonts.body}"`;
-        const offerW = ctx.measureText(edits.offer).width;
-        const padX = 28;
-        const badgeW = offerW + padX * 2;
-        const badgeH = 64;
-        const bx = textAlign === "center" ? textX - badgeW / 2 : textX;
-        roundRectPath(ctx, bx, cursorY, badgeW, badgeH, badgeH / 2);
-        ctx.strokeStyle = brandColors.gold;
-        ctx.lineWidth = 2;
-        ctx.stroke();
-        ctx.fillStyle = brandColors.goldBright;
-        ctx.textBaseline = "middle";
-        ctx.fillText(edits.offer, textAlign === "center" ? textX : bx + padX, cursorY + badgeH / 2 + 1);
-        ctx.textBaseline = "alphabetic";
-        cursorY += badgeH;
-      }
-
       // CTA
       if (edits.cta && preset.ctaStyle !== "none") {
         cursorY += 40;

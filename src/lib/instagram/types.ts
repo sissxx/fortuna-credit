@@ -53,14 +53,10 @@ export type ImageFit = "cover" | "contain";
 export type ImagePosition = "top" | "center" | "bottom";
 
 export type CampaignInput = {
-  campaignName: string;
-  productOrService: string;
-  headline: string;
-  supportingText: string;
-  cta: string;
-  offer: string; // price / discount / promo text, optional
-  startDate: string;
-  endDate: string;
+  /** Selected value-prop focus areas (0 or more) — titles from the Fortuna
+   * Credit brand context. Headline/supporting text/CTA are always derived
+   * from these + the brand context, never typed freehand. */
+  focusAreas: string[];
   additionalInfo: string;
   postType: PostType;
 };
@@ -83,7 +79,6 @@ export type PostEdits = {
   headline: string;
   supportingText: string;
   cta: string;
-  offer: string;
   headlineScale: number; // 0.8–1.3 multiplier
   textAlign: "left" | "center";
   image: ImageState;
