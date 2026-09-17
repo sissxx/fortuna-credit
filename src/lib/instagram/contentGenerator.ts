@@ -7,13 +7,14 @@ import {
   type FortunaOffice,
   type ValueProp,
 } from "@/lib/fortuna/businessContext";
-import { pickFromLibrary, type CopyCategory } from "@/lib/fortuna/copyLibrary";
+import { AI_CHOOSE, pickFromLibrary, translatePhrase, type CopyCategory } from "@/lib/fortuna/copyLibrary";
 import {
   genId,
   type CampaignCopy,
   type CampaignInput,
   type DesignVariation,
   type FormatId,
+  type MessageSelections,
   type OfficeSnapshot,
   type PostType,
 } from "./types";
@@ -23,12 +24,17 @@ import {
  * UI only depends on this interface — swap TemplateContentGenerator for a
  * real LLM-backed implementation later without touching any component.
  *
- * The admin gives a single free-text "campaign idea"; this generator reads
- * it against the Fortuna Credit brand context (src/lib/fortuna/businessContext.ts)
- * and copy library (src/lib/fortuna/copyLibrary.ts) to infer a post type,
- * relevant value props, and — if a real, verified office is named or
- * selected — that office's contact info. It never invents a phone number,
- * address, offer or condition; anything it can't verify is simply omitted.
+ * The admin gives a single free-text "campaign idea" plus, optionally, an
+ * exact phrase per marketing-message menu (§30–35). This generator:
+ *  - reads the idea against the Fortuna Credit brand context
+ *    (src/lib/fortuna/businessContext.ts) to infer a post type, relevant
+ *    value props, and — if a real, verified office is named or selected —
+ *    that office's contact info;
+ *  - uses any explicitly selected phrase (from src/lib/fortuna/copyLibrary.ts)
+ *    verbatim, exactly as chosen, and only falls back to picking one itself
+ *    for menus left on "AI Choose".
+ * It never invents a phone number, address, offer or condition; anything
+ * it can't verify is simply omitted.
  *
  * Design/layout is deliberately NOT part of this interface's output beyond
  * the DesignVariation shells it returns: colors, fonts and composition come
@@ -92,16 +98,14 @@ function inferPostType(ideaNorm: string): PostType {
   return "promotional";
 }
 
-const TONE_KEYWORDS: Record<CopyCategory, string[]> = {
+const TONE_KEYWORDS: Record<"lifestyle" | "trust", string[]> = {
   lifestyle: ["young", "start", "new beginning", "emotional", "dream", "млад", "нов старт", "начинание", "мечт"],
   trust: ["close", "trust", "human", "personal", "care", "близо", "доверие", "личен", "грижа"],
-  hooks: [],
-  cta: [],
 };
 
-function inferToneCategory(ideaNorm: string): CopyCategory {
-  for (const [category, keywords] of Object.entries(TONE_KEYWORDS) as [CopyCategory, string[]][]) {
-    if (keywords.length && keywords.some((k) => containsKeyword(ideaNorm, k))) return category;
+function inferToneCategory(ideaNorm: string): "hooks" | "trust" | "lifestyle" {
+  for (const [category, keywords] of Object.entries(TONE_KEYWORDS) as ["lifestyle" | "trust", string[]][]) {
+    if (keywords.some((k) => containsKeyword(ideaNorm, k))) return category;
   }
   return "hooks";
 }
@@ -133,7 +137,7 @@ function resolveOffice(input: CampaignInput, ctx: FortunaBusinessContext): Fortu
 
 type Analysis = {
   postType: PostType;
-  tone: CopyCategory;
+  tone: "hooks" | "trust" | "lifestyle";
   focus: ValueProp[];
   office: FortunaOffice | null;
   seed: number;
@@ -151,43 +155,75 @@ function analyzeIdea(input: CampaignInput, ctx: FortunaBusinessContext): Analysi
   };
 }
 
+// --- Message selections ---------------------------------------------------
+
+/** Translates any explicit (non-AI_CHOOSE) selections to another locale via
+ * their paired index in the copy library, so a bilingual post's secondary
+ * language reflects the same admin-chosen message, not a different one. */
+function resolveSelectionsForLocale(selections: MessageSelections, fromLocale: ContextLocale, toLocale: ContextLocale): MessageSelections {
+  if (fromLocale === toLocale) return selections;
+  const translate = (category: CopyCategory, value: string) => (value === AI_CHOOSE ? AI_CHOOSE : translatePhrase(category, value, fromLocale, toLocale));
+  return {
+    hook: translate("hooks", selections.hook),
+    trust: translate("trust", selections.trust),
+    lifestyle: translate("lifestyle", selections.lifestyle),
+    cta: translate("cta", selections.cta),
+    shortHeadline: translate("shortHeadline", selections.shortHeadline),
+  };
+}
+
 // --- Copy assembly -------------------------------------------------------
 
 function officeCta(office: FortunaOffice, locale: ContextLocale): string {
   return locale === "bg" ? `Посети ни в ${office.city}.` : `Visit us in ${office.city}.`;
 }
 
-function buildCopyForLocale(locale: ContextLocale, analysis: Analysis, variationIndex: number): CampaignCopy {
+function buildCopyForLocale(
+  locale: ContextLocale,
+  analysis: Analysis,
+  selections: MessageSelections,
+  seed: number
+): CampaignCopy {
   const ctx = getFortunaContext(locale);
   const office = analysis.office ? ctx.offices.find((o) => o.id === analysis.office!.id) ?? null : null;
   const focus = ctx.valueProps.filter((v) => analysis.focus.some((f) => f.title === v.title));
   const primaryFocus = focus[0] ?? ctx.valueProps[0];
-  const seed = analysis.seed + variationIndex;
 
-  // Headline: an office-led idea leads with the city; otherwise pull from
-  // the tone-appropriate hook/lifestyle library, alternating with the
-  // value-prop title so the 5 variations genuinely differ.
+  // Resolve each menu: an explicit admin pick is used exactly as chosen
+  // (§38); "AI Choose" falls back to a library pick, varied per variation
+  // via the seed so the 5 designs still read as genuinely different.
+  const hook = selections.hook !== AI_CHOOSE ? selections.hook : pickFromLibrary("hooks", locale, seed);
+  const trust = selections.trust !== AI_CHOOSE ? selections.trust : pickFromLibrary("trust", locale, seed + 1);
+  const lifestyle = selections.lifestyle !== AI_CHOOSE ? selections.lifestyle : pickFromLibrary("lifestyle", locale, seed + 2);
+  const shortHeadline = selections.shortHeadline !== AI_CHOOSE ? selections.shortHeadline : null;
+
+  const cta =
+    selections.cta !== AI_CHOOSE
+      ? selections.cta
+      : office && seed % 2 === 0
+        ? officeCta(office, locale)
+        : pickFromLibrary("cta", locale, seed + 3);
+
+  // Headline: an explicit short headline always wins; otherwise an
+  // office-led idea leads with the city, else the (explicit or AI) hook.
   let headline: string;
-  if (office && (analysis.postType === "event-announcement" || variationIndex === 0)) {
+  if (shortHeadline) {
+    headline = shortHeadline;
+  } else if (office && analysis.postType === "event-announcement") {
     headline = `${ctx.name} — ${office.city}`;
-  } else if (variationIndex % 2 === 0) {
-    headline = pickFromLibrary(analysis.tone === "cta" ? "hooks" : analysis.tone, locale, seed);
   } else {
-    headline = primaryFocus.title;
+    headline = hook;
   }
 
-  // Supporting text: trust copy when an office/personal angle is present,
-  // otherwise the matched value prop's own description.
+  // Supporting text: an explicit trust or lifestyle pick wins (trust takes
+  // priority if both are set); otherwise alternate the AI picks for variety.
   const supportingText =
-    office || analysis.tone === "trust"
-      ? pickFromLibrary("trust", locale, seed + 1)
-      : primaryFocus.description;
+    selections.trust !== AI_CHOOSE ? trust : selections.lifestyle !== AI_CHOOSE ? lifestyle : seed % 2 === 0 ? trust : lifestyle;
 
-  const cta = office && variationIndex % 2 === 0 ? officeCta(office, locale) : pickFromLibrary("cta", locale, seed + 2);
-
+  const captionLead = selections.hook !== AI_CHOOSE ? hook : selections.trust !== AI_CHOOSE ? trust : pickFromLibrary("hooks", locale, seed);
   const caption = office
-    ? `${pickFromLibrary("trust", locale, seed)} ${locale === "bg" ? `Посетете ни в ${office.city}.` : `Visit us in ${office.city}.`}`
-    : `${pickFromLibrary("hooks", locale, seed)} ${primaryFocus.description}`;
+    ? `${captionLead} ${locale === "bg" ? `Посетете ни в ${office.city}.` : `Visit us in ${office.city}.`}`
+    : `${captionLead} ${primaryFocus.description}`;
 
   const focusTags = focus.map((f) => slugTag(f.title)).filter(Boolean);
   const brandTag = slugTag(ctx.name);
@@ -222,18 +258,22 @@ export class TemplateContentGenerator implements ContentGenerator {
   async generateCampaignCopy(input: CampaignInput, locale: ContextLocale): Promise<CampaignCopy> {
     const ctx = getFortunaContext(locale);
     const analysis = analyzeIdea(input, ctx);
-    return buildCopyForLocale(locale, analysis, 0);
+    const seed = analysis.seed + input.nonce * 97;
+    return buildCopyForLocale(locale, analysis, input.selections, seed);
   }
 
   async generateVariations(input: CampaignInput, formatId: FormatId, locale: ContextLocale): Promise<DesignVariation[]> {
     const primaryCtx = getFortunaContext(locale);
     const analysis = analyzeIdea(input, primaryCtx);
     const secondaryLocale: ContextLocale = locale === "bg" ? "en" : "bg";
+    const secondarySelections = resolveSelectionsForLocale(input.selections, locale, secondaryLocale);
+    const baseSeed = analysis.seed + input.nonce * 97;
 
     return LAYOUT_PRESETS.map((preset, index) => {
-      const copy = buildCopyForLocale(locale, analysis, index);
+      const seed = baseSeed + index;
+      const copy = buildCopyForLocale(locale, analysis, input.selections, seed);
       const secondary =
-        input.languageMode === "both" ? buildCopyForLocale(secondaryLocale, analysis, index) : null;
+        input.languageMode === "both" ? buildCopyForLocale(secondaryLocale, analysis, secondarySelections, seed) : null;
       const office = analysis.office ? toOfficeSnapshot(primaryCtx.offices.find((o) => o.id === analysis.office!.id)!) : null;
 
       return {

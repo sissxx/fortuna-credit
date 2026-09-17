@@ -11,6 +11,7 @@ import { LAYOUT_PRESETS, layoutPresetById } from "@/lib/instagram/layoutPresets"
 import { getContentGenerator, analyzeIdea } from "@/lib/instagram/contentGenerator";
 import { savePost, saveTemplate, listPosts, listTemplates } from "@/lib/instagram/storage";
 import { getFortunaContext, type ContextLocale } from "@/lib/fortuna/businessContext";
+import { AI_CHOOSE, libraryPhrases, type CopyCategory } from "@/lib/fortuna/copyLibrary";
 import FortunaContextPanel from "@/components/admin/FortunaContextPanel";
 import {
   INSTAGRAM_FORMATS,
@@ -26,6 +27,7 @@ import {
   type ImagePosition,
   type LanguageMode,
   type LayoutPresetId,
+  type MessageSelections,
   type OfficeSnapshot,
   type PostEdits,
 } from "@/lib/instagram/types";
@@ -33,6 +35,22 @@ import {
 const FORTUNA_NAME = "Fortuna Credit";
 
 const LANGUAGE_LABELS: Record<LanguageMode, string> = { bg: "Bulgarian", en: "English", both: "Both" };
+
+const MESSAGE_MENUS: { key: keyof MessageSelections; category: CopyCategory; label: string }[] = [
+  { key: "hook", category: "hooks", label: "Attention / Hook" },
+  { key: "trust", category: "trust", label: "Trust / Human Approach" },
+  { key: "lifestyle", category: "lifestyle", label: "Lifestyle / Opportunity" },
+  { key: "cta", category: "cta", label: "Call to Action" },
+  { key: "shortHeadline", category: "shortHeadline", label: "Short Headline (visual text)" },
+];
+
+const emptySelections: MessageSelections = {
+  hook: AI_CHOOSE,
+  trust: AI_CHOOSE,
+  lifestyle: AI_CHOOSE,
+  cta: AI_CHOOSE,
+  shortHeadline: AI_CHOOSE,
+};
 
 type EditableCopy = { headline: string; supportingText: string; cta: string };
 type FineTune = { headlineScale: number; textAlign: "left" | "center"; showAccent: boolean };
@@ -61,6 +79,8 @@ export default function InstagramGenerator() {
   const [idea, setIdea] = useState("");
   const [languageMode, setLanguageMode] = useState<LanguageMode>("bg");
   const [officeId, setOfficeId] = useState("all");
+  const [selections, setSelections] = useState<MessageSelections>(emptySelections);
+  const [nonce, setNonce] = useState(0);
   const [formatId, setFormatId] = useState<FormatId>("square");
   const [imageSrc, setImageSrc] = useState<string | null>(null);
   const [imageFit, setImageFit] = useState<ImageFit>("cover");
@@ -88,8 +108,13 @@ export default function InstagramGenerator() {
 
   const primaryLocale: ContextLocale = languageMode === "en" ? "en" : "bg";
   const ctx = useMemo(() => getFortunaContext(primaryLocale), [primaryLocale]);
-  const campaignInput = useMemo<CampaignInput>(() => ({ idea, languageMode, officeId }), [idea, languageMode, officeId]);
-  const analysis = useMemo(() => analyzeIdea(campaignInput, ctx), [campaignInput, ctx]);
+  // nonce doesn't affect classification (only AI-chosen creative variety),
+  // so the live analysis used for the eyebrow label can ignore it.
+  const baseCampaignInput = useMemo<Omit<CampaignInput, "nonce">>(
+    () => ({ idea, languageMode, officeId, selections }),
+    [idea, languageMode, officeId, selections]
+  );
+  const analysis = useMemo(() => analyzeIdea({ ...baseCampaignInput, nonce: 0 }, ctx), [baseCampaignInput, ctx]);
   const eyebrowLabel = POST_TYPE_LABELS[analysis.postType];
 
   const searchParams = useSearchParams();
@@ -188,17 +213,18 @@ export default function InstagramGenerator() {
     };
   }
 
-  async function handleGenerate() {
+  async function runGenerate(nonceValue: number, toastMessage: string) {
     if (!idea.trim()) {
       showToast("Describe what you want to promote first.", "error");
       return;
     }
     setGenerating(true);
     try {
+      const input: CampaignInput = { ...baseCampaignInput, nonce: nonceValue };
       const generator = getContentGenerator();
       const [generatedCopy, newVariations] = await Promise.all([
-        generator.generateCampaignCopy(campaignInput, primaryLocale),
-        generator.generateVariations(campaignInput, formatId, primaryLocale),
+        generator.generateCampaignCopy(input, primaryLocale),
+        generator.generateVariations(input, formatId, primaryLocale),
       ]);
       setCopy(generatedCopy);
       setHashtagsText(generatedCopy.hashtags.join(" "));
@@ -211,10 +237,21 @@ export default function InstagramGenerator() {
       setOffice(first.edits.office);
       setFineTune({ headlineScale: first.edits.headlineScale, textAlign: first.edits.textAlign, showAccent: first.edits.showAccent });
       setGenerated(true);
-      showToast("Generated 5 design variations.", "success");
+      showToast(toastMessage, "success");
     } finally {
       setGenerating(false);
     }
+  }
+
+  function handleGenerate() {
+    setNonce(0);
+    runGenerate(0, "Generated 5 design variations.");
+  }
+
+  function handleNewVariation() {
+    const next = nonce + 1;
+    setNonce(next);
+    runGenerate(next, "Generated a new creative — your selected messages and office info stayed put.");
   }
 
   function selectVariation(presetId: LayoutPresetId) {
@@ -228,7 +265,7 @@ export default function InstagramGenerator() {
 
   async function regenerateCaption() {
     const generator = getContentGenerator();
-    const fresh = await generator.generateCampaignCopy(campaignInput, primaryLocale);
+    const fresh = await generator.generateCampaignCopy({ ...baseCampaignInput, nonce: nonce + 1 }, primaryLocale);
     setCopy(fresh);
     setHashtagsText(fresh.hashtags.join(" "));
     showToast("Caption regenerated.", "success");
@@ -373,6 +410,31 @@ export default function InstagramGenerator() {
           </section>
 
           <section className="rounded-2xl border border-black/8 bg-white p-5">
+            <h2 className="text-sm font-bold uppercase tracking-widest text-brand-gold">Marketing messages</h2>
+            <p className="mt-1 text-xs text-brand-gray/50">
+              Pick an exact phrase per category, or leave it on <strong>AI Choose</strong> and let the studio pick one for
+              you. Anything you pick is used exactly as written.
+            </p>
+            <div className="mt-4 space-y-4">
+              {MESSAGE_MENUS.map((menu) => (
+                <Select
+                  key={menu.key}
+                  label={menu.label}
+                  value={selections[menu.key]}
+                  onChange={(e) => setSelections((s) => ({ ...s, [menu.key]: e.target.value }))}
+                >
+                  <option value={AI_CHOOSE}>✨ AI Choose</option>
+                  {libraryPhrases(menu.category, primaryLocale).map((phrase) => (
+                    <option key={phrase} value={phrase}>
+                      {phrase}
+                    </option>
+                  ))}
+                </Select>
+              ))}
+            </div>
+          </section>
+
+          <section className="rounded-2xl border border-black/8 bg-white p-5">
             <h2 className="text-sm font-bold uppercase tracking-widest text-brand-gold">Image</h2>
             <div className="mt-4 space-y-4">
               <input
@@ -428,6 +490,11 @@ export default function InstagramGenerator() {
           <Button onClick={handleGenerate} disabled={generating} className="w-full" size="lg">
             {generating ? "Generating…" : "✨ Generate Post"}
           </Button>
+          {generated && (
+            <Button onClick={handleNewVariation} disabled={generating} variant="outline" className="w-full" size="md">
+              🔄 Generate New Variation
+            </Button>
+          )}
         </div>
 
         {/* Preview + results */}

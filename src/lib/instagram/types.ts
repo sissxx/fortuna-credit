@@ -55,15 +55,31 @@ export type ImagePosition = "top" | "center" | "bottom";
 export const LANGUAGE_MODES = ["bg", "en", "both"] as const;
 export type LanguageMode = (typeof LANGUAGE_MODES)[number];
 
+/** One selection per marketing-message menu (§30–35). Each value is either
+ * "ai" (the AI_CHOOSE sentinel from copyLibrary.ts) or an exact phrase the
+ * admin picked — which must be used verbatim, never rewritten (§38). */
+export type MessageSelections = {
+  hook: string;
+  trust: string;
+  lifestyle: string;
+  cta: string;
+  shortHeadline: string;
+};
+
 export type CampaignInput = {
   /** Free-text description of what to promote — the only thing the admin
    * has to write. Everything else (post type, focus, headline/CTA copy) is
-   * inferred from this plus the brand context. */
+   * inferred from this plus the brand context, except where overridden by
+   * an explicit message selection. */
   idea: string;
   languageMode: LanguageMode;
   /** A specific office id, or "all" to let the idea text decide (or omit
    * office contact info entirely if none is mentioned). */
   officeId: string;
+  selections: MessageSelections;
+  /** Bumped by "Generate New Variation" to reroll AI-chosen picks/layout
+   * while keeping explicit selections and factual data unchanged (§41). */
+  nonce: number;
 };
 
 export type CampaignCopy = {
