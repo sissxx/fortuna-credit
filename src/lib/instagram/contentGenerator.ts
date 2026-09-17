@@ -1,22 +1,27 @@
 import { LAYOUT_PRESETS } from "./layoutPresets";
+import { getFortunaContext, type ContextLocale, type FortunaBusinessContext } from "@/lib/fortuna/businessContext";
 import { genId, type CampaignCopy, type CampaignInput, type DesignVariation, type FormatId, type PostType } from "./types";
 
 /**
  * Content-generation abstraction (see project instructions §15). The admin
  * UI only depends on this interface — swap TemplateContentGenerator for a
  * real LLM-backed implementation later without touching any component.
+ *
+ * This generator is grounded in FORTUNA_CONTEXT (src/lib/fortuna/businessContext.ts)
+ * — the real vision statement, value propositions, eligibility rules and
+ * office/contact data already published on the site — rather than generic
+ * marketing filler. A caller never has to re-explain what Fortuna Credit is;
+ * it only supplies the campaign-specific bits (headline override, offer,
+ * dates) on top of that standing context.
+ *
  * Design/layout is deliberately NOT part of this interface's output beyond
  * the DesignVariation shells it returns: colors, fonts and composition come
  * from src/lib/brand/tokens.ts and src/lib/instagram/layoutPresets.ts, which
  * a content generator can never override.
  */
 export interface ContentGenerator {
-  generateCampaignCopy(input: CampaignInput): Promise<CampaignCopy>;
-  generateVariations(input: CampaignInput, formatId: FormatId): Promise<DesignVariation[]>;
-}
-
-function isCyrillic(text: string): boolean {
-  return /[Ѐ-ӿ]/.test(text);
+  generateCampaignCopy(input: CampaignInput, locale: ContextLocale): Promise<CampaignCopy>;
+  generateVariations(input: CampaignInput, formatId: FormatId, locale: ContextLocale): Promise<DesignVariation[]>;
 }
 
 function pick<T>(arr: T[], seed: number): T {
@@ -41,56 +46,6 @@ const CTA_DEFAULTS: Record<PostType, { bg: string; en: string }> = {
   custom: { bg: "Научи повече", en: "Learn More" },
 };
 
-const CAPTION_TEMPLATES: Record<PostType, { bg: string[]; en: string[] }> = {
-  promotional: {
-    bg: [
-      "{product} — просто и прозрачно, без излишни усложнения. {offer}",
-      "Финансова подкрепа, когато ви трябва. {product} с ясни условия. {offer}",
-    ],
-    en: [
-      "{product} — simple and transparent, without the complications. {offer}",
-      "Financial support when you need it. {product} with clear terms. {offer}",
-    ],
-  },
-  "product-announcement": {
-    bg: ["Представяме ви {product}. {offer}", "Ново във Fortuna Credit: {product}. {offer}"],
-    en: ["Introducing {product}. {offer}", "New at Fortuna Credit: {product}. {offer}"],
-  },
-  "sale-discount": {
-    bg: ["{offer} за {product} — само за ограничено време.", "Специална оферта: {offer} за {product}."],
-    en: ["{offer} on {product} — for a limited time.", "Special offer: {offer} on {product}."],
-  },
-  educational: {
-    bg: ["Какво трябва да знаете за {product}, преди да кандидатствате.", "{product} обяснен просто — без дребен шрифт."],
-    en: ["What you should know about {product} before you apply.", "{product}, explained simply — no fine print."],
-  },
-  testimonial: {
-    bg: ["Истории на клиенти, които избраха {product}.", "Ето какво споделят клиентите ни за {product}."],
-    en: ["Real stories from customers who chose {product}.", "Here's what our customers say about {product}."],
-  },
-  "feature-highlight": {
-    bg: ["{product}: това, което го прави различен.", "Защо клиентите ни избират {product}."],
-    en: ["{product}: what makes it different.", "Why our customers choose {product}."],
-  },
-  "event-announcement": {
-    bg: ["Присъединете се към нас — {campaignName}.", "Отбележете си датата: {campaignName}."],
-    en: ["Join us for {campaignName}.", "Mark your calendar: {campaignName}."],
-  },
-  "brand-awareness": {
-    bg: ["Fortuna Credit — бърз, лесен и прозрачен кредит.", "Кредит, изграден върху доверие и простота."],
-    en: ["Fortuna Credit — fast, simple, transparent credit.", "Credit built on trust and simplicity."],
-  },
-  custom: {
-    bg: ["{product}. {offer}"],
-    en: ["{product}. {offer}"],
-  },
-};
-
-const HASHTAG_BASE: { bg: string[]; en: string[] } = {
-  bg: ["#FortunaCredit", "#Кредит", "#БързКредит", "#ФинансоваСвобода"],
-  en: ["#FortunaCredit", "#Credit", "#FastCredit", "#FinancialFreedom"],
-};
-
 function slugTag(word: string): string {
   const cleaned = word
     .normalize("NFKD")
@@ -106,44 +61,113 @@ function slugTag(word: string): string {
   );
 }
 
-function fill(template: string, input: CampaignInput): string {
+function fill(template: string, input: CampaignInput, product: string): string {
   return template
-    .replace(/\{product\}/g, input.productOrService || "Fortuna Credit")
+    .replace(/\{product\}/g, input.productOrService?.trim() || product)
     .replace(/\{offer\}/g, input.offer || "")
     .replace(/\{campaignName\}/g, input.campaignName || "")
     .trim()
     .replace(/\s+/g, " ");
 }
 
+// Caption builders per post type — each one is grounded in the real
+// business context rather than generic template slop. Returns a caption
+// candidate list; one is picked deterministically from the campaign seed
+// so re-generating the same campaign is stable, while different campaigns
+// naturally land on different phrasing.
+function captionCandidates(input: CampaignInput, ctx: FortunaBusinessContext): string[] {
+  const bg = ctx.locale === "bg";
+  const product = input.productOrService?.trim() || ctx.service.name;
+
+  switch (input.postType) {
+    case "promotional":
+      return [
+        fill(bg ? "{product} — {offer_or_vision}" : "{product} — {offer_or_vision}", input, product).replace(
+          "{offer_or_vision}",
+          input.offer || ctx.service.description
+        ),
+        ctx.service.description + (input.offer ? ` ${input.offer}.` : ""),
+      ];
+    case "product-announcement":
+      return [
+        (bg ? `Представяме ви ${product}. ` : `Introducing ${product}. `) + ctx.service.description,
+        (bg ? `Ново във ${ctx.name}: ` : `New at ${ctx.name}: `) + product + (input.offer ? ` — ${input.offer}` : "."),
+      ];
+    case "sale-discount":
+      return [
+        `${input.offer || (bg ? "Специална оферта" : "Special offer")} — ${product}${
+          bg ? " само за ограничено време." : ", for a limited time."
+        }`,
+      ];
+    case "educational": {
+      const rule = pick(ctx.eligibility, hashSeed(input.campaignName));
+      return [
+        bg
+          ? `Какво трябва да знаете, преди да кандидатствате за ${product}: ${rule.toLowerCase()}.`
+          : `What you should know before applying for ${product}: ${rule.toLowerCase()}.`,
+        bg
+          ? `${ctx.responsibleBorrowing[0]}`
+          : `${ctx.responsibleBorrowing[0]}`,
+      ];
+    }
+    case "testimonial": {
+      const supportProp = ctx.valueProps.find((v) => /support|подход/i.test(v.title)) ?? ctx.valueProps[2];
+      return [
+        bg
+          ? `${supportProp.description} Ето защо клиентите ни избират ${ctx.name}.`
+          : `${supportProp.description} That's why customers choose ${ctx.name}.`,
+      ];
+    }
+    case "feature-highlight": {
+      const prop = pick(ctx.valueProps, hashSeed(input.campaignName + input.productOrService));
+      return [`${prop.title}. ${prop.description}`];
+    }
+    case "event-announcement":
+      return [
+        bg
+          ? `${input.campaignName || `Нов офис на ${ctx.name}`} — ${ctx.newOffice.openingDateLabel} в ${ctx.newOffice.city}.`
+          : `${input.campaignName || `A new ${ctx.name} location`} — ${ctx.newOffice.openingDateLabel} in ${ctx.newOffice.city}.`,
+      ];
+    case "brand-awareness":
+      return [ctx.tagline + " " + ctx.vision, ctx.vision];
+    case "custom":
+    default:
+      return [fill("{product}. {offer}", input, product)];
+  }
+}
+
 export class TemplateContentGenerator implements ContentGenerator {
-  async generateCampaignCopy(input: CampaignInput): Promise<CampaignCopy> {
-    const lang = isCyrillic(input.headline || input.productOrService || input.campaignName) ? "bg" : "en";
+  async generateCampaignCopy(input: CampaignInput, locale: ContextLocale): Promise<CampaignCopy> {
+    const ctx = getFortunaContext(locale);
     const seed = hashSeed(input.campaignName + input.productOrService + input.postType);
 
-    const headline = input.headline?.trim() || (input.productOrService ? input.productOrService : "Fortuna Credit");
-    const cta = input.cta?.trim() || CTA_DEFAULTS[input.postType][lang];
-    const captionTemplate = pick(CAPTION_TEMPLATES[input.postType][lang], seed);
-    const caption = fill(captionTemplate, input);
+    const headline = input.headline?.trim() || input.productOrService?.trim() || ctx.service.name;
+    const cta = input.cta?.trim() || CTA_DEFAULTS[input.postType][locale];
+    const caption = pick(captionCandidates(input, ctx), seed);
 
-    const productTags = (input.productOrService || "")
+    const productTags = (input.productOrService || ctx.service.name)
       .split(/[,/]|\sand\s|\sи\s/i)
       .map((w) => slugTag(w))
       .filter(Boolean)
       .slice(0, 3);
 
-    const hashtags = Array.from(new Set([...HASHTAG_BASE[lang], ...productTags])).slice(0, 8);
+    const brandTag = slugTag(ctx.name);
+    const hashtags = Array.from(new Set([brandTag, ...productTags, ...(locale === "bg" ? ["#Кредит", "#БързКредит"] : ["#Credit", "#FastCredit"])])).slice(
+      0,
+      8
+    );
 
     return {
       headline,
-      supportingText: input.supportingText?.trim() || "",
+      supportingText: input.supportingText?.trim() || (input.postType === "brand-awareness" ? ctx.service.description : ""),
       cta,
       caption,
       hashtags,
     };
   }
 
-  async generateVariations(input: CampaignInput, formatId: FormatId): Promise<DesignVariation[]> {
-    const copy = await this.generateCampaignCopy(input);
+  async generateVariations(input: CampaignInput, formatId: FormatId, locale: ContextLocale): Promise<DesignVariation[]> {
+    const copy = await this.generateCampaignCopy(input, locale);
 
     return LAYOUT_PRESETS.map((preset) => ({
       id: genId(preset.id),

@@ -11,6 +11,8 @@ import InstagramCanvas, { type InstagramCanvasHandle } from "@/components/admin/
 import { LAYOUT_PRESETS, layoutPresetById } from "@/lib/instagram/layoutPresets";
 import { getContentGenerator } from "@/lib/instagram/contentGenerator";
 import { savePost, saveTemplate, listPosts, listTemplates } from "@/lib/instagram/storage";
+import { getFortunaContext, type ContextLocale } from "@/lib/fortuna/businessContext";
+import FortunaContextPanel from "@/components/admin/FortunaContextPanel";
 import {
   INSTAGRAM_FORMATS,
   POST_TYPES,
@@ -61,6 +63,7 @@ function downloadDataUrl(dataUrl: string, filename: string) {
 export default function InstagramGenerator() {
   const { showToast } = useToast();
 
+  const [locale, setLocale] = useState<ContextLocale>("bg");
   const [campaign, setCampaign] = useState<CampaignInput>(emptyCampaign);
   const [formatId, setFormatId] = useState<FormatId>("square");
   const [imageSrc, setImageSrc] = useState<string | null>(null);
@@ -160,14 +163,14 @@ export default function InstagramGenerator() {
   }
 
   async function handleGenerate() {
-    if (!campaign.campaignName.trim() || !campaign.productOrService.trim()) {
-      showToast("Add a campaign name and product/service first.", "error");
+    if (!campaign.campaignName.trim()) {
+      showToast("Add a campaign name first.", "error");
       return;
     }
     setGenerating(true);
     try {
       const generator = getContentGenerator();
-      const generatedCopy = await generator.generateCampaignCopy(campaign);
+      const generatedCopy = await generator.generateCampaignCopy(campaign, locale);
       setCopy(generatedCopy);
       setContent({
         headline: generatedCopy.headline,
@@ -194,7 +197,7 @@ export default function InstagramGenerator() {
 
   async function regenerateCaption() {
     const generator = getContentGenerator();
-    const fresh = await generator.generateCampaignCopy(campaign);
+    const fresh = await generator.generateCampaignCopy(campaign, locale);
     setCopy(fresh);
     setHashtagsText(fresh.hashtags.join(" "));
     showToast("Caption regenerated.", "success");
@@ -260,15 +263,36 @@ export default function InstagramGenerator() {
   }
 
   const eyebrowLabel = useMemo(() => POST_TYPE_LABELS[campaign.postType], [campaign.postType]);
+  const ctx = useMemo(() => getFortunaContext(locale), [locale]);
 
   return (
     <div className="mx-auto max-w-[1600px]">
+      <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <p className="font-brand text-2xl text-brand-black">Fortuna Credit Marketing Studio</p>
+          <p className="mt-1 text-sm text-brand-gray/60">
+            Instagram/Facebook ad generator, pre-configured for Fortuna Credit — design variations use the brand&apos;s
+            own colors, fonts and radius automatically, and copy is grounded in the real site content below.
+          </p>
+        </div>
+        <div className="inline-flex items-center gap-0.5 rounded-full border border-black/10 p-0.5 text-xs font-bold">
+          {(["bg", "en"] as ContextLocale[]).map((l) => (
+            <button
+              key={l}
+              type="button"
+              onClick={() => setLocale(l)}
+              className={`rounded-full px-3 py-1.5 transition-colors ${
+                locale === l ? "bg-brand-gold text-brand-black" : "text-brand-gray/60 hover:text-brand-black"
+              }`}
+            >
+              {l.toUpperCase()}
+            </button>
+          ))}
+        </div>
+      </div>
+
       <div className="mb-6">
-        <p className="font-brand text-2xl text-brand-black">Instagram Post Generator</p>
-        <p className="mt-1 text-sm text-brand-gray/60">
-          Design variations use Fortuna Credit&apos;s brand tokens automatically — colors, fonts, and radius are fixed;
-          only composition changes between variations.
-        </p>
+        <FortunaContextPanel locale={locale} />
       </div>
 
       <div className="grid gap-6 lg:grid-cols-[380px_1fr]">
@@ -278,7 +302,28 @@ export default function InstagramGenerator() {
             <h2 className="text-sm font-bold uppercase tracking-widest text-brand-gold">Campaign</h2>
             <div className="mt-4 space-y-4">
               <Input label="Campaign name" required value={campaign.campaignName} onChange={(e) => updateCampaign("campaignName", e.target.value)} />
-              <Input label="Product / service" required value={campaign.productOrService} onChange={(e) => updateCampaign("productOrService", e.target.value)} />
+              <div>
+                <Input
+                  label="Product / service"
+                  optional
+                  hint={`Defaults to "${ctx.service.name}" if left blank`}
+                  placeholder={ctx.service.name}
+                  value={campaign.productOrService}
+                  onChange={(e) => updateCampaign("productOrService", e.target.value)}
+                />
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {ctx.valueProps.slice(0, 4).map((v) => (
+                    <button
+                      key={v.title}
+                      type="button"
+                      onClick={() => updateCampaign("productOrService", v.title)}
+                      className="rounded-full border border-black/10 px-2.5 py-1 text-[11px] font-medium text-brand-gray/70 hover:border-brand-gold hover:text-brand-black"
+                    >
+                      {v.title}
+                    </button>
+                  ))}
+                </div>
+              </div>
               <Select label="Post type" value={campaign.postType} onChange={(e) => updateCampaign("postType", e.target.value as PostType)}>
                 {POST_TYPES.map((t) => (
                   <option key={t} value={t}>
