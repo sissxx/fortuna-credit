@@ -4,29 +4,13 @@ export function genId(prefix: string): string {
   return `${prefix}-${Date.now()}-${idCounter}`;
 }
 
-export const POST_TYPES = [
-  "promotional",
-  "product-announcement",
-  "sale-discount",
-  "educational",
-  "testimonial",
-  "feature-highlight",
-  "event-announcement",
-  "brand-awareness",
-  "custom",
-] as const;
+// Every post this studio generates promotes Fortuna Credit — there is no
+// "what kind of post" classification to infer or choose; it's always an ad.
+export const POST_TYPES = ["ad"] as const;
 export type PostType = (typeof POST_TYPES)[number];
 
 export const POST_TYPE_LABELS: Record<PostType, string> = {
-  promotional: "Promotional ad",
-  "product-announcement": "Product announcement",
-  "sale-discount": "Sale / discount",
-  educational: "Educational post",
-  testimonial: "Testimonial",
-  "feature-highlight": "Feature highlight",
-  "event-announcement": "Event announcement",
-  "brand-awareness": "Brand awareness",
-  custom: "Custom",
+  ad: "Ad",
 };
 
 export const INSTAGRAM_FORMATS = [
@@ -67,14 +51,8 @@ export type MessageSelections = {
 };
 
 export type CampaignInput = {
-  /** Free-text description of what to promote — the only thing the admin
-   * has to write. Everything else (post type, focus, headline/CTA copy) is
-   * inferred from this plus the brand context, except where overridden by
-   * an explicit message selection. */
-  idea: string;
   languageMode: LanguageMode;
-  /** A specific office id, or "all" to let the idea text decide (or omit
-   * office contact info entirely if none is mentioned). */
+  /** A specific office id, or "all" for no office-specific contact info. */
   officeId: string;
   selections: MessageSelections;
   /** Bumped by "Generate New Variation" to reroll AI-chosen picks/layout

@@ -8,7 +8,7 @@ import Badge from "@/components/ui/Badge";
 import { useToast } from "@/components/ui/Toast";
 import InstagramCanvas, { type InstagramCanvasHandle } from "@/components/admin/InstagramCanvas";
 import { LAYOUT_PRESETS, layoutPresetById } from "@/lib/instagram/layoutPresets";
-import { getContentGenerator, analyzeIdea } from "@/lib/instagram/contentGenerator";
+import { getContentGenerator } from "@/lib/instagram/contentGenerator";
 import { savePost, saveTemplate, listPosts, listTemplates } from "@/lib/instagram/storage";
 import { getFortunaContext, type ContextLocale } from "@/lib/fortuna/businessContext";
 import { AI_CHOOSE, libraryPhrases, type CopyCategory } from "@/lib/fortuna/copyLibrary";
@@ -33,6 +33,10 @@ import {
 } from "@/lib/instagram/types";
 
 const FORTUNA_NAME = "Fortuna Credit";
+
+// Every post is an ad for Fortuna Credit — there's no post-type to infer,
+// just the locale-appropriate word for the eyebrow badge shown on the ad.
+const AD_LABEL: Record<ContextLocale, string> = { bg: "Реклама", en: "Ad" };
 
 const LANGUAGE_LABELS: Record<LanguageMode, string> = { bg: "Bulgarian", en: "English", both: "Both" };
 
@@ -76,7 +80,6 @@ function downloadDataUrl(dataUrl: string, filename: string) {
 export default function InstagramGenerator() {
   const { showToast } = useToast();
 
-  const [idea, setIdea] = useState("");
   const [languageMode, setLanguageMode] = useState<LanguageMode>("bg");
   const [officeId, setOfficeId] = useState("all");
   const [selections, setSelections] = useState<MessageSelections>(emptySelections);
@@ -108,14 +111,11 @@ export default function InstagramGenerator() {
 
   const primaryLocale: ContextLocale = languageMode === "en" ? "en" : "bg";
   const ctx = useMemo(() => getFortunaContext(primaryLocale), [primaryLocale]);
-  // nonce doesn't affect classification (only AI-chosen creative variety),
-  // so the live analysis used for the eyebrow label can ignore it.
   const baseCampaignInput = useMemo<Omit<CampaignInput, "nonce">>(
-    () => ({ idea, languageMode, officeId, selections }),
-    [idea, languageMode, officeId, selections]
+    () => ({ languageMode, officeId, selections }),
+    [languageMode, officeId, selections]
   );
-  const analysis = useMemo(() => analyzeIdea({ ...baseCampaignInput, nonce: 0 }, ctx), [baseCampaignInput, ctx]);
-  const eyebrowLabel = POST_TYPE_LABELS[analysis.postType];
+  const eyebrowLabel = AD_LABEL[primaryLocale];
 
   const searchParams = useSearchParams();
 
@@ -164,7 +164,7 @@ export default function InstagramGenerator() {
         setCopy({ headline: e.headline, supportingText: e.supportingText, cta: e.cta, caption: "", hashtags: [] });
         setVariations(null);
         setGenerated(true);
-        showToast(`Loaded template "${template.name}". Adjust the idea and regenerate the caption if needed.`, "success");
+        showToast(`Loaded template "${template.name}". Adjust the messages and regenerate the caption if needed.`, "success");
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -214,10 +214,6 @@ export default function InstagramGenerator() {
   }
 
   async function runGenerate(nonceValue: number, toastMessage: string) {
-    if (!idea.trim()) {
-      showToast("Describe what you want to promote first.", "error");
-      return;
-    }
     setGenerating(true);
     try {
       const input: CampaignInput = { ...baseCampaignInput, nonce: nonceValue };
@@ -276,14 +272,14 @@ export default function InstagramGenerator() {
     const dataUrl = handle?.getDataUrl(type);
     if (!dataUrl) return;
     const ext = type === "image/png" ? "png" : "jpg";
-    downloadDataUrl(dataUrl, `fortuna-credit-${analysis.postType}-${selectedPresetId}.${ext}`);
+    downloadDataUrl(dataUrl, `fortuna-credit-ad-${selectedPresetId}.${ext}`);
   }
 
   function downloadAllVariations() {
     for (const preset of LAYOUT_PRESETS) {
       const handle = canvasRefs.current[preset.id];
       const dataUrl = handle?.getDataUrl("image/png");
-      if (dataUrl) downloadDataUrl(dataUrl, `fortuna-credit-${analysis.postType}-${preset.id}.png`);
+      if (dataUrl) downloadDataUrl(dataUrl, `fortuna-credit-ad-${preset.id}.png`);
     }
   }
 
@@ -294,8 +290,8 @@ export default function InstagramGenerator() {
     const thumbnail = canvasRefs.current[selectedPresetId]?.getDataUrl("image/jpeg") ?? undefined;
     const post: GeneratedPost = {
       id: genId("post"),
-      campaignName: `${FORTUNA_NAME} — ${POST_TYPE_LABELS[analysis.postType]}`,
-      postType: analysis.postType,
+      campaignName: `${FORTUNA_NAME} — ${POST_TYPE_LABELS.ad}`,
+      postType: "ad",
       formatId,
       createdAt: new Date().toISOString(),
       status,
@@ -318,7 +314,7 @@ export default function InstagramGenerator() {
     const edits = buildEdits(selectedPresetId);
     saveTemplate({
       id: genId("template"),
-      name: `${POST_TYPE_LABELS[analysis.postType]} — ${preset.label}`,
+      name: `${POST_TYPE_LABELS.ad} — ${preset.label}`,
       layoutPresetId: preset.id,
       formatId,
       edits,
@@ -341,7 +337,7 @@ export default function InstagramGenerator() {
       <div className="mb-6">
         <p className="font-brand text-2xl text-brand-black">Fortuna Credit Marketing Studio</p>
         <p className="mt-1 text-sm text-brand-gray/60">
-          Describe what you want to promote — the studio already knows Fortuna Credit&apos;s brand, offices and voice.
+          Every post promotes Fortuna Credit — pick the language, an office if relevant, and the messages you want to use.
         </p>
       </div>
 
@@ -353,43 +349,20 @@ export default function InstagramGenerator() {
         {/* Controls */}
         <div className="space-y-5">
           <section className="rounded-2xl border border-black/8 bg-white p-5">
-            <h2 className="text-sm font-bold uppercase tracking-widest text-brand-gold">What do you want to promote?</h2>
-            <textarea
-              rows={4}
-              value={idea}
-              onChange={(e) => setIdea(e.target.value)}
-              placeholder="e.g. Create something attractive for our office, focused on people who need extra financial support."
-              className="mt-3 w-full rounded-xl border border-black/12 bg-white px-4 py-3 text-sm text-brand-black placeholder:text-brand-gray/40 focus:border-brand-gold focus:outline-none focus:ring-2 focus:ring-brand-gold/20"
-            />
-            {idea.trim() && (
-              <p className="mt-2 text-xs text-brand-gray/50">
-                Reading this as <span className="font-semibold text-brand-black">{eyebrowLabel}</span>
-                {analysis.office && (
-                  <>
-                    {" "}
-                    for <span className="font-semibold text-brand-black">{analysis.office.city}</span>
-                  </>
-                )}
-                .
-              </p>
-            )}
-
-            <div className="mt-5">
-              <span className="text-sm font-medium text-brand-gray">Language</span>
-              <div className="mt-2 flex gap-1.5">
-                {LANGUAGE_MODES.map((mode) => (
-                  <button
-                    key={mode}
-                    type="button"
-                    onClick={() => setLanguageMode(mode)}
-                    className={`flex-1 rounded-lg border px-3 py-2 text-xs font-semibold transition-colors ${
-                      languageMode === mode ? "border-brand-gold bg-brand-gold text-brand-black" : "border-black/12 text-brand-gray hover:border-brand-gold"
-                    }`}
-                  >
-                    {LANGUAGE_LABELS[mode]}
-                  </button>
-                ))}
-              </div>
+            <h2 className="text-sm font-bold uppercase tracking-widest text-brand-gold">Language</h2>
+            <div className="mt-3 flex gap-1.5">
+              {LANGUAGE_MODES.map((mode) => (
+                <button
+                  key={mode}
+                  type="button"
+                  onClick={() => setLanguageMode(mode)}
+                  className={`flex-1 rounded-lg border px-3 py-2 text-xs font-semibold transition-colors ${
+                    languageMode === mode ? "border-brand-gold bg-brand-gold text-brand-black" : "border-black/12 text-brand-gray hover:border-brand-gold"
+                  }`}
+                >
+                  {LANGUAGE_LABELS[mode]}
+                </button>
+              ))}
             </div>
 
             <div className="mt-5">
@@ -403,8 +376,7 @@ export default function InstagramGenerator() {
                 ))}
               </Select>
               <p className="mt-1.5 text-xs text-brand-gray/50">
-                Mentioning a known office by city in the text above works too — the phone number and city shown on the ad
-                always come from verified office data, never typed by hand.
+                Selecting an office attaches its verified phone number and city to the ad — never typed by hand.
               </p>
             </div>
           </section>
@@ -502,8 +474,7 @@ export default function InstagramGenerator() {
           {!generated ? (
             <div className="flex h-full min-h-[420px] flex-col items-center justify-center rounded-2xl border border-dashed border-black/15 bg-white/60 p-10 text-center">
               <p className="text-sm text-brand-gray/60">
-                Describe what you want to promote and click <strong>Generate Post</strong> to see five on-brand variations
-                here.
+                Click <strong>Generate Post</strong> to see five on-brand Fortuna Credit ad variations here.
               </p>
             </div>
           ) : (

@@ -9,10 +9,8 @@
 // truth the public website renders from. Where the business hasn't
 // supplied real data (phone numbers, office addresses, loan terms), the
 // same bracket placeholders shown on the website are reused verbatim —
-// never replaced with plausible-looking fake data. If a generated ad
-// references an office the admin didn't select and the free-text idea
-// doesn't clearly name a real, known office, no office is attached rather
-// than guessing one.
+// never replaced with plausible-looking fake data. An ad only ever gets
+// office contact info when the admin explicitly selects that office.
 import bgDict from "@/i18n/dictionaries/bg";
 import enDict from "@/i18n/dictionaries/en";
 import { fortuna, officesMeta, loanConfig } from "@/config/site";
@@ -124,31 +122,4 @@ export const FORTUNA_CONTEXT: Record<ContextLocale, FortunaBusinessContext> = {
 
 export function getFortunaContext(locale: ContextLocale): FortunaBusinessContext {
   return FORTUNA_CONTEXT[locale];
-}
-
-function normalize(text: string): string {
-  return text
-    .toLowerCase()
-    .normalize("NFKD")
-    .replace(/[̀-ͯ]/g, "");
-}
-
-/**
- * Looks for a mention of a known, verified office's city in free text (the
- * admin's campaign idea). Only ever matches against real configured
- * offices — never fabricates a match for a city that isn't one of ours.
- */
-export function findOfficeByText(text: string, ctx: FortunaBusinessContext): FortunaOffice | null {
-  const normalizedText = normalize(text);
-  if (!normalizedText.trim()) return null;
-
-  return (
-    ctx.offices.find((office) => {
-      const city = normalize(office.city);
-      // Bracket placeholders (e.g. "[CITY]") can't meaningfully match free
-      // text — skip until the business supplies a real city name.
-      if (!city || city.includes("[")) return false;
-      return normalizedText.includes(city);
-    }) ?? null
-  );
 }
