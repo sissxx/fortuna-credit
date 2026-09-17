@@ -52,13 +52,18 @@ export type LayoutPresetId = (typeof LAYOUT_PRESET_IDS)[number];
 export type ImageFit = "cover" | "contain";
 export type ImagePosition = "top" | "center" | "bottom";
 
+export const LANGUAGE_MODES = ["bg", "en", "both"] as const;
+export type LanguageMode = (typeof LANGUAGE_MODES)[number];
+
 export type CampaignInput = {
-  /** Selected value-prop focus areas (0 or more) — titles from the Fortuna
-   * Credit brand context. Headline/supporting text/CTA are always derived
-   * from these + the brand context, never typed freehand. */
-  focusAreas: string[];
-  additionalInfo: string;
-  postType: PostType;
+  /** Free-text description of what to promote — the only thing the admin
+   * has to write. Everything else (post type, focus, headline/CTA copy) is
+   * inferred from this plus the brand context. */
+  idea: string;
+  languageMode: LanguageMode;
+  /** A specific office id, or "all" to let the idea text decide (or omit
+   * office contact info entirely if none is mentioned). */
+  officeId: string;
 };
 
 export type CampaignCopy = {
@@ -75,15 +80,28 @@ export type ImageState = {
   position: ImagePosition;
 };
 
+/** Verified office contact info attached to a post — never free text. */
+export type OfficeSnapshot = {
+  id: string;
+  name: string;
+  city: string;
+  phone: string;
+  isNew: boolean;
+};
+
 export type PostEdits = {
   headline: string;
   supportingText: string;
   cta: string;
+  /** English counterpart shown alongside the primary copy when the
+   * campaign's language mode is "both". */
+  secondary: { headline: string; supportingText: string; cta: string } | null;
   headlineScale: number; // 0.8–1.3 multiplier
   textAlign: "left" | "center";
   image: ImageState;
   showAccent: boolean;
   showLogo: boolean;
+  office: OfficeSnapshot | null;
 };
 
 export type DesignVariation = {

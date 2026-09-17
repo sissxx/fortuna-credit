@@ -35,12 +35,11 @@ export default function FortunaContextPanel({ locale }: { locale: ContextLocale 
           <div>
             <p className="font-bold uppercase tracking-widest text-brand-gold/80">Offices</p>
             {ctx.offices.map((o) => (
-              <p key={o.id}>{o.city}</p>
+              <p key={o.id}>
+                {o.city}
+                {o.isNew && <span className="text-brand-gold"> ({o.openingDateLabel})</span>}
+              </p>
             ))}
-            <p>
-              {ctx.newOffice.city}{" "}
-              <span className="text-brand-gold">({ctx.newOffice.openingDateLabel})</span>
-            </p>
           </div>
         </div>
 

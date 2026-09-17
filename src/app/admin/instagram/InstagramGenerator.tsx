@@ -2,40 +2,40 @@
 
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import { useSearchParams } from "next/navigation";
-import Input from "@/components/ui/Input";
 import Select from "@/components/ui/Select";
 import Button from "@/components/ui/Button";
 import Badge from "@/components/ui/Badge";
 import { useToast } from "@/components/ui/Toast";
 import InstagramCanvas, { type InstagramCanvasHandle } from "@/components/admin/InstagramCanvas";
 import { LAYOUT_PRESETS, layoutPresetById } from "@/lib/instagram/layoutPresets";
-import { getContentGenerator } from "@/lib/instagram/contentGenerator";
+import { getContentGenerator, analyzeIdea } from "@/lib/instagram/contentGenerator";
 import { savePost, saveTemplate, listPosts, listTemplates } from "@/lib/instagram/storage";
 import { getFortunaContext, type ContextLocale } from "@/lib/fortuna/businessContext";
 import FortunaContextPanel from "@/components/admin/FortunaContextPanel";
 import {
   INSTAGRAM_FORMATS,
-  POST_TYPES,
+  LANGUAGE_MODES,
   POST_TYPE_LABELS,
   genId,
   type CampaignInput,
   type CampaignCopy,
+  type DesignVariation,
   type FormatId,
   type GeneratedPost,
   type ImageFit,
   type ImagePosition,
+  type LanguageMode,
   type LayoutPresetId,
+  type OfficeSnapshot,
   type PostEdits,
-  type PostType,
 } from "@/lib/instagram/types";
 
 const FORTUNA_NAME = "Fortuna Credit";
 
-const emptyCampaign: CampaignInput = {
-  focusAreas: [],
-  additionalInfo: "",
-  postType: "promotional",
-};
+const LANGUAGE_LABELS: Record<LanguageMode, string> = { bg: "Bulgarian", en: "English", both: "Both" };
+
+type EditableCopy = { headline: string; supportingText: string; cta: string };
+type FineTune = { headlineScale: number; textAlign: "left" | "center"; showAccent: boolean };
 
 function readFileAsDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -58,17 +58,21 @@ function downloadDataUrl(dataUrl: string, filename: string) {
 export default function InstagramGenerator() {
   const { showToast } = useToast();
 
-  const [locale, setLocale] = useState<ContextLocale>("bg");
-  const [campaign, setCampaign] = useState<CampaignInput>(emptyCampaign);
+  const [idea, setIdea] = useState("");
+  const [languageMode, setLanguageMode] = useState<LanguageMode>("bg");
+  const [officeId, setOfficeId] = useState("all");
   const [formatId, setFormatId] = useState<FormatId>("square");
   const [imageSrc, setImageSrc] = useState<string | null>(null);
   const [imageFit, setImageFit] = useState<ImageFit>("cover");
   const [imagePosition, setImagePosition] = useState<ImagePosition>("center");
 
   const [generated, setGenerated] = useState(false);
+  const [variations, setVariations] = useState<DesignVariation[] | null>(null);
   const [selectedPresetId, setSelectedPresetId] = useState<LayoutPresetId>("minimal");
-  const [content, setContent] = useState({ headline: "", supportingText: "", cta: "" });
-  const [fineTune, setFineTune] = useState({ headlineScale: 1, textAlign: "left" as "left" | "center", showAccent: true });
+  const [content, setContent] = useState<EditableCopy>({ headline: "", supportingText: "", cta: "" });
+  const [secondary, setSecondary] = useState<EditableCopy | null>(null);
+  const [office, setOffice] = useState<OfficeSnapshot | null>(null);
+  const [fineTune, setFineTune] = useState<FineTune>({ headlineScale: 1, textAlign: "left", showAccent: true });
   const [showLogo, setShowLogo] = useState(true);
   const [copy, setCopy] = useState<CampaignCopy | null>(null);
   const [hashtagsText, setHashtagsText] = useState("");
@@ -82,6 +86,12 @@ export default function InstagramGenerator() {
     "image-focused": null,
   });
 
+  const primaryLocale: ContextLocale = languageMode === "en" ? "en" : "bg";
+  const ctx = useMemo(() => getFortunaContext(primaryLocale), [primaryLocale]);
+  const campaignInput = useMemo<CampaignInput>(() => ({ idea, languageMode, officeId }), [idea, languageMode, officeId]);
+  const analysis = useMemo(() => analyzeIdea(campaignInput, ctx), [campaignInput, ctx]);
+  const eyebrowLabel = POST_TYPE_LABELS[analysis.postType];
+
   const searchParams = useSearchParams();
 
   useEffect(() => {
@@ -92,11 +102,12 @@ export default function InstagramGenerator() {
       const post = listPosts().find((p) => p.id === postId);
       if (post) {
         // eslint-disable-next-line react-hooks/set-state-in-effect
-        setCampaign((prev) => ({ ...prev, postType: post.postType }));
         setFormatId(post.formatId);
         setSelectedPresetId(post.variation.layoutPresetId);
         const e = post.variation.edits;
         setContent({ headline: e.headline, supportingText: e.supportingText, cta: e.cta });
+        setSecondary(e.secondary);
+        setOffice(e.office);
         setFineTune({ headlineScale: e.headlineScale, textAlign: e.textAlign, showAccent: e.showAccent });
         setShowLogo(e.showLogo);
         setImageSrc(e.image.src);
@@ -104,6 +115,7 @@ export default function InstagramGenerator() {
         setImagePosition(e.image.position);
         setCopy(post.copy);
         setHashtagsText(post.copy.hashtags.join(" "));
+        setVariations(null);
         setGenerated(true);
         showToast("Loaded saved post for editing.", "success");
       }
@@ -117,22 +129,21 @@ export default function InstagramGenerator() {
         setSelectedPresetId(template.layoutPresetId);
         const e = template.edits;
         setContent({ headline: e.headline, supportingText: e.supportingText, cta: e.cta });
+        setSecondary(e.secondary);
+        setOffice(e.office);
         setFineTune({ headlineScale: e.headlineScale, textAlign: e.textAlign, showAccent: e.showAccent });
         setShowLogo(e.showLogo);
         setImageSrc(e.image.src);
         setImageFit(e.image.fit);
         setImagePosition(e.image.position);
         setCopy({ headline: e.headline, supportingText: e.supportingText, cta: e.cta, caption: "", hashtags: [] });
+        setVariations(null);
         setGenerated(true);
-        showToast(`Loaded template "${template.name}". Replace campaign details and generate a caption.`, "success");
+        showToast(`Loaded template "${template.name}". Adjust the idea and regenerate the caption if needed.`, "success");
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
-
-  function updateCampaign<K extends keyof CampaignInput>(key: K, value: CampaignInput[K]) {
-    setCampaign((prev) => ({ ...prev, [key]: value }));
-  }
 
   async function handleImageUpload(e: ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -143,34 +154,62 @@ export default function InstagramGenerator() {
 
   function buildEdits(presetId: LayoutPresetId): PostEdits {
     const preset = layoutPresetById(presetId);
-    const isSelected = presetId === selectedPresetId;
+    const image = { src: imageSrc, fit: imageFit, position: imagePosition };
+
+    if (presetId === selectedPresetId) {
+      return {
+        headline: content.headline,
+        supportingText: content.supportingText,
+        cta: content.cta,
+        secondary,
+        headlineScale: fineTune.headlineScale,
+        textAlign: fineTune.textAlign,
+        image,
+        showAccent: fineTune.showAccent,
+        showLogo,
+        office,
+      };
+    }
+
+    const variation = variations?.find((v) => v.layoutPresetId === presetId);
+    if (variation) return { ...variation.edits, image, showLogo, office };
+
     return {
-      headline: content.headline,
-      supportingText: content.supportingText,
-      cta: content.cta,
-      headlineScale: isSelected ? fineTune.headlineScale : preset.headlineScale,
-      textAlign: isSelected ? fineTune.textAlign : preset.textAlign,
-      image: { src: imageSrc, fit: imageFit, position: imagePosition },
-      showAccent: isSelected ? fineTune.showAccent : preset.showAccentHairline,
+      headline: "",
+      supportingText: "",
+      cta: "",
+      secondary: null,
+      headlineScale: preset.headlineScale,
+      textAlign: preset.textAlign,
+      image,
+      showAccent: preset.showAccentHairline,
       showLogo,
+      office,
     };
   }
 
   async function handleGenerate() {
+    if (!idea.trim()) {
+      showToast("Describe what you want to promote first.", "error");
+      return;
+    }
     setGenerating(true);
     try {
       const generator = getContentGenerator();
-      const generatedCopy = await generator.generateCampaignCopy(campaign, locale);
+      const [generatedCopy, newVariations] = await Promise.all([
+        generator.generateCampaignCopy(campaignInput, primaryLocale),
+        generator.generateVariations(campaignInput, formatId, primaryLocale),
+      ]);
       setCopy(generatedCopy);
-      setContent({
-        headline: generatedCopy.headline,
-        supportingText: generatedCopy.supportingText,
-        cta: generatedCopy.cta,
-      });
       setHashtagsText(generatedCopy.hashtags.join(" "));
-      setSelectedPresetId("minimal");
-      const preset = layoutPresetById("minimal");
-      setFineTune({ headlineScale: preset.headlineScale, textAlign: preset.textAlign, showAccent: preset.showAccentHairline });
+      setVariations(newVariations);
+
+      const first = newVariations.find((v) => v.layoutPresetId === "minimal") ?? newVariations[0];
+      setSelectedPresetId(first.layoutPresetId);
+      setContent({ headline: first.edits.headline, supportingText: first.edits.supportingText, cta: first.edits.cta });
+      setSecondary(first.edits.secondary);
+      setOffice(first.edits.office);
+      setFineTune({ headlineScale: first.edits.headlineScale, textAlign: first.edits.textAlign, showAccent: first.edits.showAccent });
       setGenerated(true);
       showToast("Generated 5 design variations.", "success");
     } finally {
@@ -180,13 +219,16 @@ export default function InstagramGenerator() {
 
   function selectVariation(presetId: LayoutPresetId) {
     setSelectedPresetId(presetId);
-    const preset = layoutPresetById(presetId);
-    setFineTune({ headlineScale: preset.headlineScale, textAlign: preset.textAlign, showAccent: preset.showAccentHairline });
+    const variation = variations?.find((v) => v.layoutPresetId === presetId);
+    if (!variation) return;
+    setContent({ headline: variation.edits.headline, supportingText: variation.edits.supportingText, cta: variation.edits.cta });
+    setSecondary(variation.edits.secondary);
+    setFineTune({ headlineScale: variation.edits.headlineScale, textAlign: variation.edits.textAlign, showAccent: variation.edits.showAccent });
   }
 
   async function regenerateCaption() {
     const generator = getContentGenerator();
-    const fresh = await generator.generateCampaignCopy(campaign, locale);
+    const fresh = await generator.generateCampaignCopy(campaignInput, primaryLocale);
     setCopy(fresh);
     setHashtagsText(fresh.hashtags.join(" "));
     showToast("Caption regenerated.", "success");
@@ -197,14 +239,14 @@ export default function InstagramGenerator() {
     const dataUrl = handle?.getDataUrl(type);
     if (!dataUrl) return;
     const ext = type === "image/png" ? "png" : "jpg";
-    downloadDataUrl(dataUrl, `fortuna-credit-${campaign.postType}-${selectedPresetId}.${ext}`);
+    downloadDataUrl(dataUrl, `fortuna-credit-${analysis.postType}-${selectedPresetId}.${ext}`);
   }
 
   function downloadAllVariations() {
     for (const preset of LAYOUT_PRESETS) {
       const handle = canvasRefs.current[preset.id];
       const dataUrl = handle?.getDataUrl("image/png");
-      if (dataUrl) downloadDataUrl(dataUrl, `fortuna-credit-${campaign.postType}-${preset.id}.png`);
+      if (dataUrl) downloadDataUrl(dataUrl, `fortuna-credit-${analysis.postType}-${preset.id}.png`);
     }
   }
 
@@ -215,13 +257,19 @@ export default function InstagramGenerator() {
     const thumbnail = canvasRefs.current[selectedPresetId]?.getDataUrl("image/jpeg") ?? undefined;
     const post: GeneratedPost = {
       id: genId("post"),
-      campaignName: `${FORTUNA_NAME} — ${POST_TYPE_LABELS[campaign.postType]}`,
-      postType: campaign.postType,
+      campaignName: `${FORTUNA_NAME} — ${POST_TYPE_LABELS[analysis.postType]}`,
+      postType: analysis.postType,
       formatId,
       createdAt: new Date().toISOString(),
       status,
       variation: { id: genId(preset.id), layoutPresetId: preset.id, label: preset.label, formatId, edits },
-      copy: { ...copy, headline: content.headline, supportingText: content.supportingText, cta: content.cta, hashtags: hashtagsText.split(/\s+/).filter(Boolean) },
+      copy: {
+        ...copy,
+        headline: content.headline,
+        supportingText: content.supportingText,
+        cta: content.cta,
+        hashtags: hashtagsText.split(/\s+/).filter(Boolean),
+      },
       thumbnail,
     };
     savePost(post);
@@ -233,7 +281,7 @@ export default function InstagramGenerator() {
     const edits = buildEdits(selectedPresetId);
     saveTemplate({
       id: genId("template"),
-      name: `${POST_TYPE_LABELS[campaign.postType]} — ${preset.label}`,
+      name: `${POST_TYPE_LABELS[analysis.postType]} — ${preset.label}`,
       layoutPresetId: preset.id,
       formatId,
       edits,
@@ -251,99 +299,76 @@ export default function InstagramGenerator() {
     navigator.clipboard.writeText(hashtagsText).then(() => showToast("Hashtags copied.", "success"));
   }
 
-  const eyebrowLabel = useMemo(() => POST_TYPE_LABELS[campaign.postType], [campaign.postType]);
-  const ctx = useMemo(() => getFortunaContext(locale), [locale]);
-
   return (
     <div className="mx-auto max-w-[1600px]">
-      <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <p className="font-brand text-2xl text-brand-black">Fortuna Credit Marketing Studio</p>
-          <p className="mt-1 text-sm text-brand-gray/60">
-            Instagram/Facebook ad generator, pre-configured for Fortuna Credit — design variations use the brand&apos;s
-            own colors, fonts and radius automatically, and copy is grounded in the real site content below.
-          </p>
-        </div>
-        <div className="inline-flex items-center gap-0.5 rounded-full border border-black/10 p-0.5 text-xs font-bold">
-          {(["bg", "en"] as ContextLocale[]).map((l) => (
-            <button
-              key={l}
-              type="button"
-              onClick={() => setLocale(l)}
-              className={`rounded-full px-3 py-1.5 transition-colors ${
-                locale === l ? "bg-brand-gold text-brand-black" : "text-brand-gray/60 hover:text-brand-black"
-              }`}
-            >
-              {l.toUpperCase()}
-            </button>
-          ))}
-        </div>
+      <div className="mb-6">
+        <p className="font-brand text-2xl text-brand-black">Fortuna Credit Marketing Studio</p>
+        <p className="mt-1 text-sm text-brand-gray/60">
+          Describe what you want to promote — the studio already knows Fortuna Credit&apos;s brand, offices and voice.
+        </p>
       </div>
 
       <div className="mb-6">
-        <FortunaContextPanel locale={locale} />
+        <FortunaContextPanel locale={primaryLocale} />
       </div>
 
       <div className="grid gap-6 lg:grid-cols-[380px_1fr]">
         {/* Controls */}
         <div className="space-y-5">
           <section className="rounded-2xl border border-black/8 bg-white p-5">
-            <h2 className="text-sm font-bold uppercase tracking-widest text-brand-gold">Campaign</h2>
-            <p className="mt-1 text-xs text-brand-gray/50">
-              Brand is always {FORTUNA_NAME}. Headline, supporting text and CTA are generated from the brand context —
-              fine-tune them after generating, below.
-            </p>
-            <div className="mt-4 space-y-4">
-              <Select label="Post type" value={campaign.postType} onChange={(e) => updateCampaign("postType", e.target.value as PostType)}>
-                {POST_TYPES.map((t) => (
-                  <option key={t} value={t}>
-                    {POST_TYPE_LABELS[t]}
+            <h2 className="text-sm font-bold uppercase tracking-widest text-brand-gold">What do you want to promote?</h2>
+            <textarea
+              rows={4}
+              value={idea}
+              onChange={(e) => setIdea(e.target.value)}
+              placeholder="e.g. Create something attractive for our office, focused on people who need extra financial support."
+              className="mt-3 w-full rounded-xl border border-black/12 bg-white px-4 py-3 text-sm text-brand-black placeholder:text-brand-gray/40 focus:border-brand-gold focus:outline-none focus:ring-2 focus:ring-brand-gold/20"
+            />
+            {idea.trim() && (
+              <p className="mt-2 text-xs text-brand-gray/50">
+                Reading this as <span className="font-semibold text-brand-black">{eyebrowLabel}</span>
+                {analysis.office && (
+                  <>
+                    {" "}
+                    for <span className="font-semibold text-brand-black">{analysis.office.city}</span>
+                  </>
+                )}
+                .
+              </p>
+            )}
+
+            <div className="mt-5">
+              <span className="text-sm font-medium text-brand-gray">Language</span>
+              <div className="mt-2 flex gap-1.5">
+                {LANGUAGE_MODES.map((mode) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    onClick={() => setLanguageMode(mode)}
+                    className={`flex-1 rounded-lg border px-3 py-2 text-xs font-semibold transition-colors ${
+                      languageMode === mode ? "border-brand-gold bg-brand-gold text-brand-black" : "border-black/12 text-brand-gray hover:border-brand-gold"
+                    }`}
+                  >
+                    {LANGUAGE_LABELS[mode]}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="mt-5">
+              <Select label="Office" value={officeId} onChange={(e) => setOfficeId(e.target.value)}>
+                <option value="all">All locations / not office-specific</option>
+                {ctx.offices.map((o) => (
+                  <option key={o.id} value={o.id}>
+                    {o.name}
+                    {o.isNew ? ` (opening ${o.openingDateLabel})` : ""}
                   </option>
                 ))}
               </Select>
-
-              <div>
-                <span className="flex items-baseline justify-between text-sm font-medium text-brand-gray">
-                  <span>Focus areas</span>
-                  <span className="text-xs font-normal text-brand-gray/50">Select one or more</span>
-                </span>
-                <p className="mt-1 text-xs text-brand-gray/50">
-                  Leave none selected to let the generator pick automatically.
-                </p>
-                <div className="mt-2 flex flex-wrap gap-1.5">
-                  {ctx.valueProps.map((v) => {
-                    const isSelected = campaign.focusAreas.includes(v.title);
-                    return (
-                      <button
-                        key={v.title}
-                        type="button"
-                        aria-pressed={isSelected}
-                        onClick={() =>
-                          updateCampaign(
-                            "focusAreas",
-                            isSelected ? campaign.focusAreas.filter((t) => t !== v.title) : [...campaign.focusAreas, v.title]
-                          )
-                        }
-                        className={`rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors ${
-                          isSelected
-                            ? "border-brand-gold bg-brand-gold text-brand-black"
-                            : "border-black/10 text-brand-gray/70 hover:border-brand-gold hover:text-brand-black"
-                        }`}
-                      >
-                        {v.title}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <Input
-                label="Additional info"
-                optional
-                hint="Appended to the generated caption, e.g. a specific note for this post"
-                value={campaign.additionalInfo}
-                onChange={(e) => updateCampaign("additionalInfo", e.target.value)}
-              />
+              <p className="mt-1.5 text-xs text-brand-gray/50">
+                Mentioning a known office by city in the text above works too — the phone number and city shown on the ad
+                always come from verified office data, never typed by hand.
+              </p>
             </div>
           </section>
 
@@ -401,7 +426,7 @@ export default function InstagramGenerator() {
           </section>
 
           <Button onClick={handleGenerate} disabled={generating} className="w-full" size="lg">
-            {generating ? "Generating…" : "Generate Posts"}
+            {generating ? "Generating…" : "✨ Generate Post"}
           </Button>
         </div>
 
@@ -410,7 +435,8 @@ export default function InstagramGenerator() {
           {!generated ? (
             <div className="flex h-full min-h-[420px] flex-col items-center justify-center rounded-2xl border border-dashed border-black/15 bg-white/60 p-10 text-center">
               <p className="text-sm text-brand-gray/60">
-                Fill in the campaign details and click <strong>Generate Posts</strong> to see five on-brand variations here.
+                Describe what you want to promote and click <strong>Generate Post</strong> to see five on-brand variations
+                here.
               </p>
             </div>
           ) : (
@@ -487,11 +513,23 @@ export default function InstagramGenerator() {
 
                 <div className="space-y-5">
                   <div className="rounded-2xl border border-black/8 bg-white p-5">
-                    <h3 className="text-sm font-bold uppercase tracking-widest text-brand-gold">Fine-tune</h3>
+                    <h3 className="text-sm font-bold uppercase tracking-widest text-brand-gold">Edit</h3>
                     <div className="mt-4 space-y-4">
-                      <Input label="Headline" value={content.headline} onChange={(e) => setContent((c) => ({ ...c, headline: e.target.value }))} />
-                      <Input label="Supporting text" optional value={content.supportingText} onChange={(e) => setContent((c) => ({ ...c, supportingText: e.target.value }))} />
-                      <Input label="CTA" value={content.cta} onChange={(e) => setContent((c) => ({ ...c, cta: e.target.value }))} />
+                      <TextField label="Headline" value={content.headline} onChange={(v) => setContent((c) => ({ ...c, headline: v }))} />
+                      <TextField label="Supporting text" value={content.supportingText} onChange={(v) => setContent((c) => ({ ...c, supportingText: v }))} />
+                      <TextField label="CTA" value={content.cta} onChange={(v) => setContent((c) => ({ ...c, cta: v }))} />
+
+                      {secondary && (
+                        <div className="space-y-3 rounded-xl border border-black/8 bg-black/[0.02] p-3">
+                          <p className="text-xs font-bold uppercase tracking-widest text-brand-gray/50">
+                            Secondary language
+                          </p>
+                          <TextField label="Headline" value={secondary.headline} onChange={(v) => setSecondary((s) => (s ? { ...s, headline: v } : s))} />
+                          <TextField label="Supporting text" value={secondary.supportingText} onChange={(v) => setSecondary((s) => (s ? { ...s, supportingText: v } : s))} />
+                          <TextField label="CTA" value={secondary.cta} onChange={(v) => setSecondary((s) => (s ? { ...s, cta: v } : s))} />
+                        </div>
+                      )}
+
                       <div>
                         <label htmlFor="headline-scale" className="text-sm font-medium text-brand-gray">
                           Headline size
@@ -530,6 +568,14 @@ export default function InstagramGenerator() {
                         <input type="checkbox" checked={showLogo} onChange={(e) => setShowLogo(e.target.checked)} className="accent-brand-gold" />
                         Show logo watermark
                       </label>
+                      {office && (
+                        <div className="rounded-lg border border-brand-gold/30 bg-brand-gold/5 p-3 text-xs text-brand-gray/70">
+                          Contact bar: <strong className="text-brand-black">{office.phone}</strong> · {office.city}
+                          <button type="button" onClick={() => setOffice(null)} className="ml-2 text-brand-gold underline">
+                            Remove
+                          </button>
+                        </div>
+                      )}
                     </div>
                   </div>
 
@@ -585,6 +631,19 @@ export default function InstagramGenerator() {
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+function TextField({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <label className="text-sm font-medium text-brand-gray">{label}</label>
+      <input
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="w-full rounded-xl border border-black/12 bg-white px-4 py-3 text-base text-brand-black placeholder:text-brand-gray/40 focus:border-brand-gold focus:outline-none focus:ring-2 focus:ring-brand-gold/20"
+      />
     </div>
   );
 }

@@ -44,9 +44,10 @@ function loadImage(src: string): Promise<HTMLImageElement> {
   });
 }
 
-async function ensureFontsLoaded(headlineFont: string) {
+async function ensureFontsLoaded(headlineFont: string, secondaryFont?: string) {
   if (typeof document === "undefined" || !("fonts" in document)) return;
   const specs = [`400 88px "${headlineFont}"`, `600 34px "${brandFonts.body}"`, `700 24px "${brandFonts.body}"`];
+  if (secondaryFont && secondaryFont !== headlineFont) specs.push(`400 60px "${secondaryFont}"`);
   await Promise.all(
     specs.map((spec) =>
       document.fonts.load(spec).catch(() => {
@@ -153,8 +154,11 @@ const InstagramCanvas = forwardRef<InstagramCanvasHandle, Props>(function Instag
       const ch = format.height;
       const pad = 72;
       const headlineFont = headingFontFor(edits.headline || "");
+      const secondaryFont = edits.secondary ? headingFontFor(edits.secondary.headline || "") : undefined;
+      const officeBarHeight = edits.office ? 156 : 0;
+      const chUsable = ch - officeBarHeight;
 
-      await ensureFontsLoaded(headlineFont);
+      await ensureFontsLoaded(headlineFont, secondaryFont);
 
       const focusY = edits.image.position === "top" ? 0 : edits.image.position === "bottom" ? 1 : 0.5;
 
@@ -226,11 +230,11 @@ const InstagramCanvas = forwardRef<InstagramCanvasHandle, Props>(function Instag
         ctx.fillStyle = g;
         ctx.fillRect(imageRect.x, imageRect.y, imageRect.w, imageRect.h);
       } else if (imageRect && preset.overlay === "bottom-gradient") {
-        const g = ctx.createLinearGradient(0, ch * 0.55, 0, ch);
+        const g = ctx.createLinearGradient(0, chUsable * 0.55, 0, ch);
         g.addColorStop(0, "rgba(7,7,7,0)");
         g.addColorStop(1, "rgba(7,7,7,0.88)");
         ctx.fillStyle = g;
-        ctx.fillRect(0, ch * 0.55, cw, ch * 0.45);
+        ctx.fillRect(0, chUsable * 0.55, cw, ch - chUsable * 0.55);
       }
 
       // --- text zone layout ---
@@ -244,13 +248,10 @@ const InstagramCanvas = forwardRef<InstagramCanvasHandle, Props>(function Instag
       if (preset.textZone === "top") {
         cursorY = imageRect && preset.imageZone === "top-half" ? imageRect.h + pad * 0.6 : pad * 1.6;
       } else if (preset.textZone === "bottom") {
-        cursorY = ch - pad * 1.4;
-        // We draw bottom-anchored content upward, so pre-measure by drawing
-        // top-down from an estimated start based on content size instead.
-        cursorY = (imageRect && preset.imageZone === "bottom-half" ? imageRect.y : ch * 0.58) + pad * 0.2;
-        if (preset.imageZone === "full-bleed") cursorY = ch * 0.6;
+        cursorY = (imageRect && preset.imageZone === "bottom-half" ? imageRect.y : chUsable * 0.56) + pad * 0.2;
+        if (preset.imageZone === "full-bleed") cursorY = chUsable * 0.58;
       } else {
-        cursorY = ch * 0.38;
+        cursorY = chUsable * 0.36;
       }
 
       // Eyebrow badge
@@ -306,12 +307,47 @@ const InstagramCanvas = forwardRef<InstagramCanvasHandle, Props>(function Instag
         cursorY += 8;
       }
 
+      // Secondary-language headline/supporting text (bilingual "both" mode)
+      if (edits.secondary) {
+        cursorY += 20;
+        ctx.strokeStyle = "rgba(201,162,39,0.3)";
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        const ruleW = Math.min(maxTextWidth, 220);
+        const rx = textAlign === "center" ? textX - ruleW / 2 : textX;
+        ctx.moveTo(rx, cursorY);
+        ctx.lineTo(rx + ruleW, cursorY);
+        ctx.stroke();
+        cursorY += 44;
+
+        const secHeadlineSize = Math.round(52 * edits.headlineScale);
+        ctx.font = `400 ${secHeadlineSize}px "${secondaryFont}"`;
+        ctx.fillStyle = brandColors.goldBright;
+        const secHeadlineLines = wrapText(ctx, edits.secondary.headline, maxTextWidth, 2);
+        for (const line of secHeadlineLines) {
+          cursorY += secHeadlineSize * 1.15;
+          ctx.fillText(line, textX, cursorY);
+        }
+
+        if (edits.secondary.supportingText) {
+          ctx.font = `400 28px "${brandFonts.body}"`;
+          ctx.fillStyle = brandColors.muted;
+          const secBodyLines = wrapText(ctx, edits.secondary.supportingText, maxTextWidth, 2);
+          for (const line of secBodyLines) {
+            cursorY += 38;
+            ctx.fillText(line, textX, cursorY);
+          }
+        }
+        cursorY += 8;
+      }
+
       // CTA
-      if (edits.cta && preset.ctaStyle !== "none") {
+      const ctaText = edits.secondary ? `${edits.cta} / ${edits.secondary.cta}` : edits.cta;
+      if (ctaText && preset.ctaStyle !== "none") {
         cursorY += 40;
         if (preset.ctaStyle === "pill") {
           ctx.font = `700 32px "${brandFonts.body}"`;
-          const ctaW = ctx.measureText(edits.cta).width;
+          const ctaW = ctx.measureText(ctaText).width;
           const padX = 44;
           const badgeW = ctaW + padX * 2;
           const badgeH = 84;
@@ -321,13 +357,13 @@ const InstagramCanvas = forwardRef<InstagramCanvasHandle, Props>(function Instag
           ctx.fill();
           ctx.fillStyle = brandColors.black;
           ctx.textBaseline = "middle";
-          ctx.fillText(edits.cta, textAlign === "center" ? textX : bx + padX, cursorY + badgeH / 2 + 2);
+          ctx.fillText(ctaText, textAlign === "center" ? textX : bx + padX, cursorY + badgeH / 2 + 2);
           ctx.textBaseline = "alphabetic";
         } else {
           ctx.font = `700 32px "${brandFonts.body}"`;
           ctx.fillStyle = brandColors.goldBright;
-          ctx.fillText(edits.cta, textX, cursorY + 28);
-          const w = ctx.measureText(edits.cta).width;
+          ctx.fillText(ctaText, textX, cursorY + 28);
+          const w = ctx.measureText(ctaText).width;
           const lx = textAlign === "center" ? textX - w / 2 : textX;
           ctx.strokeStyle = brandColors.gold;
           ctx.lineWidth = 2;
@@ -345,6 +381,40 @@ const InstagramCanvas = forwardRef<InstagramCanvasHandle, Props>(function Instag
         ctx.globalAlpha = 0.92;
         ctx.drawImage(logo, pad, pad, logoW, logoH);
         ctx.globalAlpha = 1;
+      }
+
+      // Office contact bar — a consistent, always-legible strip for the
+      // brand name, phone number and office/city, never shrunk to tiny
+      // footer text. Drawn last so it always sits on top.
+      if (edits.office) {
+        const barY = ch - officeBarHeight;
+        ctx.fillStyle = "rgba(13,13,13,0.94)";
+        ctx.fillRect(0, barY, cw, officeBarHeight);
+        ctx.strokeStyle = "rgba(201,162,39,0.35)";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(0, barY);
+        ctx.lineTo(cw, barY);
+        ctx.stroke();
+
+        let barLogoW = 0;
+        if (logo) {
+          const barLogoH = 44;
+          barLogoW = (logo.width / logo.height) * barLogoH;
+          ctx.globalAlpha = 0.95;
+          ctx.drawImage(logo, pad, barY + officeBarHeight / 2 - barLogoH / 2, barLogoW, barLogoH);
+          ctx.globalAlpha = 1;
+        }
+
+        const textStartX = pad + barLogoW + (barLogoW ? 28 : 0);
+        ctx.textAlign = "left";
+        ctx.font = `700 30px "${brandFonts.body}"`;
+        ctx.fillStyle = brandColors.white;
+        ctx.textBaseline = "alphabetic";
+        ctx.fillText(edits.office.phone, textStartX, barY + officeBarHeight / 2 + 2);
+        ctx.font = `400 24px "${brandFonts.body}"`;
+        ctx.fillStyle = brandColors.gold;
+        ctx.fillText(edits.office.city, textStartX, barY + officeBarHeight / 2 + 34);
       }
     }
 
