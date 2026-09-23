@@ -11,20 +11,16 @@ import { localePath, type Locale } from "@/i18n/config";
 import { formatCurrency, t } from "@/i18n/format";
 import { renderTemplate } from "@/i18n/renderTemplate";
 import type { Dictionary } from "@/i18n/getDictionary";
-import { estimateLoan } from "@/components/LoanCalculator";
 
 const STORAGE_KEY = "fortuna-application-draft";
 
 type FormData = {
   amount: number;
-  term: number;
-  purpose: string;
   firstName: string;
   lastName: string;
   phone: string;
   email: string;
   dob: string;
-  idNumber: string;
   city: string;
   address: string;
   preferredOffice: string;
@@ -38,14 +34,11 @@ type FormData = {
 
 const initialData: FormData = {
   amount: loanConfig.defaultAmount,
-  term: loanConfig.defaultTerm,
-  purpose: "",
   firstName: "",
   lastName: "",
   phone: "",
   email: "",
   dob: "",
-  idNumber: "",
   city: "",
   address: "",
   preferredOffice: "",
@@ -78,8 +71,8 @@ export default function ApplyForm({ dict, locale }: { dict: Dictionary; locale: 
       let merged = initialData;
       if (saved) merged = { ...merged, ...JSON.parse(saved) };
       if (selection) {
-        const { amount, term } = JSON.parse(selection);
-        merged = { ...merged, amount, term };
+        const { amount } = JSON.parse(selection);
+        merged = { ...merged, amount };
       }
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setData(merged);
@@ -104,10 +97,9 @@ export default function ApplyForm({ dict, locale }: { dict: Dictionary; locale: 
     const next: Errors = {};
 
     if (current === 1) {
-      if (!data.purpose) next.purpose = v.purpose;
-    }
-
-    if (current === 2) {
+      if (!data.amount || data.amount < loanConfig.minAmount || data.amount > loanConfig.maxAmount) {
+        next.amount = v.amount;
+      }
       if (!data.firstName.trim()) next.firstName = v.firstName;
       if (!data.lastName.trim()) next.lastName = v.lastName;
       if (!data.phone.trim()) next.phone = v.phone;
@@ -115,22 +107,21 @@ export default function ApplyForm({ dict, locale }: { dict: Dictionary; locale: 
       if (!data.email.trim()) next.email = v.email;
       else if (!/^\S+@\S+\.\S+$/.test(data.email)) next.email = v.emailInvalid;
       if (!data.dob) next.dob = v.dob;
-      if (!data.idNumber.trim()) next.idNumber = v.idNumber;
     }
 
-    if (current === 3) {
+    if (current === 2) {
       if (!data.city.trim()) next.city = v.city;
       if (!data.address.trim()) next.address = v.address;
       if (!data.preferredContactMethod) next.preferredContactMethod = v.contactMethod;
     }
 
-    if (current === 4) {
+    if (current === 3) {
       if (!data.employmentStatus) next.employmentStatus = v.employmentStatus;
       if (!data.monthlyIncome.trim()) next.monthlyIncome = v.monthlyIncome;
       else if (!/^\d+$/.test(data.monthlyIncome)) next.monthlyIncome = v.monthlyIncomeInvalid;
     }
 
-    if (current === 5) {
+    if (current === 4) {
       if (!data.privacyConsent) next.privacyConsent = v.privacyConsent;
       if (!data.termsAccepted) next.termsAccepted = v.termsAccepted;
     }
@@ -150,17 +141,25 @@ export default function ApplyForm({ dict, locale }: { dict: Dictionary; locale: 
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
-  function handleSubmit() {
-    if (!validateStep(5)) return;
+  async function handleSubmit() {
+    if (!validateStep(4)) return;
     setStatus("submitting");
 
-    setTimeout(() => {
-      const id = `FC-${Math.floor(100000 + Math.random() * 900000)}`;
+    try {
+      const res = await fetch("/api/apply", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      });
+      if (!res.ok) throw new Error("submit-failed");
+      const { applicationId: id } = (await res.json()) as { applicationId: string };
       setApplicationId(id);
       setStatus("success");
       window.localStorage.removeItem(STORAGE_KEY);
       window.scrollTo({ top: 0, behavior: "smooth" });
-    }, 1200);
+    } catch {
+      setStatus("error");
+    }
   }
 
   if (status === "success") {
@@ -226,11 +225,14 @@ export default function ApplyForm({ dict, locale }: { dict: Dictionary; locale: 
       </div>
 
       <div className="mt-8 rounded-3xl border border-black/8 bg-white p-6 shadow-sm sm:p-8">
-        {step === 1 && <StepLoan data={data} update={update} errors={errors} dict={dict} locale={locale} />}
-        {step === 2 && <StepPersonal data={data} update={update} errors={errors} dict={dict} />}
-        {step === 3 && <StepContact data={data} update={update} errors={errors} dict={dict} />}
-        {step === 4 && <StepFinancial data={data} update={update} errors={errors} dict={dict} />}
-        {step === 5 && <StepReview data={data} update={update} errors={errors} dict={dict} locale={locale} />}
+        {step === 1 && <StepPersonal data={data} update={update} errors={errors} dict={dict} locale={locale} />}
+        {step === 2 && <StepContact data={data} update={update} errors={errors} dict={dict} />}
+        {step === 3 && <StepFinancial data={data} update={update} errors={errors} dict={dict} />}
+        {step === 4 && <StepReview data={data} update={update} errors={errors} dict={dict} locale={locale} />}
+
+        {status === "error" && (
+          <p className="mt-6 rounded-xl border border-red-300 bg-red-50 p-4 text-sm text-red-700">{dict.applyForm.submitError}</p>
+        )}
 
         <div className="mt-8 flex items-center justify-between gap-4 border-t border-black/8 pt-6">
           <Button
@@ -266,87 +268,36 @@ type StepProps = {
   locale: Locale;
 };
 
-function StepLoan({ data, update, errors, dict, locale }: StepProps) {
+function StepPersonal({ data, update, errors, dict, locale }: StepProps) {
+  const p = dict.applyForm.personal;
   const l = dict.applyForm.loan;
-  const amountProgress = ((data.amount - loanConfig.minAmount) / (loanConfig.maxAmount - loanConfig.minAmount)) * 100;
-  const termProgress = ((data.term - loanConfig.minTerm) / (loanConfig.maxTerm - loanConfig.minTerm)) * 100;
-  const { total, monthlyPayment } = estimateLoan(data.amount, data.term);
   const money = (value: number) => formatCurrency(value, locale, loanConfig.currency);
 
   return (
-    <fieldset className="space-y-6">
-      <legend className="text-lg font-bold text-brand-black">{l.legend}</legend>
-
-      <div>
-        <div className="mb-2 flex items-center justify-between gap-3">
-          <label htmlFor="apply-amount" className="text-sm font-medium text-brand-gray">
-            {l.amount}
-          </label>
-          <span className="text-lg font-bold tabular-nums text-brand-gold">{money(data.amount)}</span>
-        </div>
-        <input
-          id="apply-amount"
-          type="range"
-          min={loanConfig.minAmount}
-          max={loanConfig.maxAmount}
-          step={loanConfig.amountStep}
-          value={data.amount}
-          onChange={(e) => update("amount", Number(e.target.value))}
-          style={{ ["--range-progress" as string]: `${amountProgress}%` }}
-        />
-      </div>
-
-      <div>
-        <div className="mb-2 flex items-center justify-between gap-3">
-          <label htmlFor="apply-term" className="text-sm font-medium text-brand-gray">
-            {l.term}
-          </label>
-          <span className="text-lg font-bold tabular-nums text-brand-gold">
-            {data.term} {dict.common.months}
-          </span>
-        </div>
-        <input
-          id="apply-term"
-          type="range"
-          min={loanConfig.minTerm}
-          max={loanConfig.maxTerm}
-          step={loanConfig.termStep}
-          value={data.term}
-          onChange={(e) => update("term", Number(e.target.value))}
-          style={{ ["--range-progress" as string]: `${termProgress}%` }}
-        />
-      </div>
-
-      <Select label={l.purpose} required value={data.purpose} onChange={(e) => update("purpose", e.target.value)} error={errors.purpose}>
-        <option value="">{l.purposePlaceholder}</option>
-        <option value="debt-consolidation">{l.purposeDebt}</option>
-        <option value="home-improvement">{l.purposeHome}</option>
-        <option value="vehicle">{l.purposeVehicle}</option>
-        <option value="medical">{l.purposeMedical}</option>
-        <option value="personal">{l.purposePersonal}</option>
-        <option value="other">{l.purposeOther}</option>
-      </Select>
-
-      <div className="rounded-xl border border-black/8 bg-black/[0.02] p-4 text-sm text-brand-gray/70">
-        {t(l.estimateNote, { total: money(total), monthly: money(monthlyPayment) })}
-        <p className="mt-1 text-xs text-brand-gray/50">{l.estimateDisclaimer}</p>
-      </div>
-    </fieldset>
-  );
-}
-
-function StepPersonal({ data, update, errors, dict }: Omit<StepProps, "locale">) {
-  const p = dict.applyForm.personal;
-  return (
     <fieldset className="space-y-5">
       <legend className="text-lg font-bold text-brand-black">{p.legend}</legend>
+
+      <Input
+        id="apply-amount"
+        label={l.amount}
+        type="number"
+        required
+        inputMode="numeric"
+        min={loanConfig.minAmount}
+        max={loanConfig.maxAmount}
+        step={loanConfig.amountStep}
+        value={data.amount || ""}
+        onChange={(e) => update("amount", Number(e.target.value))}
+        hint={money(data.amount || 0)}
+        error={errors.amount}
+      />
+
       <div className="grid gap-5 sm:grid-cols-2">
         <Input label={p.firstName} required autoComplete="given-name" value={data.firstName} onChange={(e) => update("firstName", e.target.value)} error={errors.firstName} />
         <Input label={p.lastName} required autoComplete="family-name" value={data.lastName} onChange={(e) => update("lastName", e.target.value)} error={errors.lastName} />
         <Input label={p.phone} type="tel" required autoComplete="tel" value={data.phone} onChange={(e) => update("phone", e.target.value)} error={errors.phone} />
         <Input label={p.email} type="email" required autoComplete="email" value={data.email} onChange={(e) => update("email", e.target.value)} error={errors.email} />
         <Input label={p.dob} type="date" required autoComplete="bday" value={data.dob} onChange={(e) => update("dob", e.target.value)} error={errors.dob} />
-        <Input label={p.idNumber} required hint={p.idHint} value={data.idNumber} onChange={(e) => update("idNumber", e.target.value)} error={errors.idNumber} />
       </div>
     </fieldset>
   );
@@ -433,18 +384,8 @@ function StepFinancial({ data, update, errors, dict }: Omit<StepProps, "locale">
 
 function StepReview({ data, update, errors, dict, locale }: StepProps) {
   const r = dict.applyForm.review;
-  const { total, monthlyPayment } = estimateLoan(data.amount, data.term);
   const money = (value: number) => formatCurrency(value, locale, loanConfig.currency);
   const conditionsHref = localePath(locale, "conditions");
-
-  const purposeLabels: Record<string, string> = {
-    "debt-consolidation": dict.applyForm.loan.purposeDebt,
-    "home-improvement": dict.applyForm.loan.purposeHome,
-    vehicle: dict.applyForm.loan.purposeVehicle,
-    medical: dict.applyForm.loan.purposeMedical,
-    personal: dict.applyForm.loan.purposePersonal,
-    other: dict.applyForm.loan.purposeOther,
-  };
 
   const methodLabels: Record<string, string> = {
     phone: dict.applyForm.contact.methodPhone,
@@ -466,10 +407,6 @@ function StepReview({ data, update, errors, dict, locale }: StepProps) {
 
       <ReviewGroup title={r.groupLoan}>
         <ReviewRow label={r.amount} value={money(data.amount)} />
-        <ReviewRow label={r.term} value={`${data.term} ${dict.common.months}`} />
-        <ReviewRow label={r.purpose} value={purposeLabels[data.purpose] ?? "—"} />
-        <ReviewRow label={r.monthlyPayment} value={money(monthlyPayment)} />
-        <ReviewRow label={r.totalRepayment} value={money(total)} />
       </ReviewGroup>
 
       <ReviewGroup title={r.groupPersonal}>

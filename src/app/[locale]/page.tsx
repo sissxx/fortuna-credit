@@ -3,8 +3,6 @@ import NewLocationSection from "@/components/sections/NewLocationSection";
 import HowItWorks from "@/components/sections/HowItWorks";
 import WhyFortuna from "@/components/sections/WhyFortuna";
 import EligibilitySection from "@/components/sections/EligibilitySection";
-import ResponsibleBorrowing from "@/components/sections/ResponsibleBorrowing";
-import TrustSection from "@/components/sections/TrustSection";
 import CTASection from "@/components/sections/CTASection";
 import { getDictionary } from "@/i18n/getDictionary";
 import { buildMetadata } from "@/i18n/metadata";
@@ -27,8 +25,6 @@ export default async function HomePage({ params }: { params: Promise<{ locale: s
       <HowItWorks dict={dict} />
       <WhyFortuna dict={dict} />
       <EligibilitySection dict={dict} locale={locale} />
-      <ResponsibleBorrowing dict={dict} />
-      <TrustSection dict={dict} locale={locale} />
       <CTASection dict={dict} locale={locale} />
     </>
   );

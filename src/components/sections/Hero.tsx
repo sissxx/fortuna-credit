@@ -1,5 +1,4 @@
 import Button from "../ui/Button";
-import LoanCalculator from "../LoanCalculator";
 import { localePath, type Locale } from "@/i18n/config";
 import type { Dictionary } from "@/i18n/getDictionary";
 
@@ -14,7 +13,7 @@ export default function Hero({ dict, locale }: { dict: Dictionary; locale: Local
         }}
         aria-hidden
       />
-      <div className="relative mx-auto grid max-w-7xl gap-12 px-4 py-16 sm:px-6 lg:grid-cols-2 lg:items-center lg:gap-10 lg:px-8 lg:py-24">
+      <div className="relative mx-auto max-w-3xl px-4 py-16 sm:px-6 lg:px-8 lg:py-24">
         <div className="animate-fade-up">
           <p className="mb-5 inline-flex items-center gap-2 rounded-full border border-brand-gold/30 bg-white/5 px-4 py-1.5 text-xs font-semibold uppercase tracking-widest text-brand-gold-bright">
             {dict.hero.eyebrow}
@@ -27,9 +26,6 @@ export default function Hero({ dict, locale }: { dict: Dictionary; locale: Local
           <p className="mt-6 max-w-lg text-lg text-brand-muted">{dict.hero.subtitle}</p>
 
           <div className="mt-8 flex flex-wrap gap-4">
-            <Button href={localePath(locale, "apply")} size="lg" variant="primary">
-              {dict.hero.applyNow}
-            </Button>
             <Button href={localePath(locale, "howItWorks")} size="lg" variant="outline">
               {dict.hero.howItWorks}
             </Button>
@@ -48,10 +44,6 @@ export default function Hero({ dict, locale }: { dict: Dictionary; locale: Local
               <CheckDot /> {dict.hero.trust3}
             </span>
           </p>
-        </div>
-
-        <div className="animate-fade-up [animation-delay:150ms]">
-          <LoanCalculator dict={dict} locale={locale} variant="dark" />
         </div>
       </div>
     </section>
